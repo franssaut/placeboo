@@ -4,10 +4,9 @@ import {
   View,
   Text,
   TouchableOpacity,
-  SafeAreaView,
-  Platform,
-  StatusBar as RNStatusBar
+  Platform
 } from 'react-native';
+import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { MaterialIcons } from '@expo/vector-icons';
 import HomeScreen from './src/screens/HomeScreen';
@@ -16,65 +15,66 @@ export default function App() {
   const [activeMode, setActiveMode] = useState('pdf_to_image'); // 'pdf_to_image' | 'image_to_pdf'
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <StatusBar style="dark" backgroundColor="#f8fafc" />
+    <SafeAreaProvider>
+      <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
+        <StatusBar style="dark" backgroundColor="#f8fafc" />
 
-      {/* Main Screen Content */}
-      <View style={styles.content}>
-        <HomeScreen mode={activeMode} onModeChange={setActiveMode} />
-      </View>
+        {/* Main Screen Content */}
+        <View style={styles.content}>
+          <HomeScreen mode={activeMode} onModeChange={setActiveMode} />
+        </View>
 
-      {/* Bottom Navigation Bar */}
-      <View style={styles.bottomNav}>
-        <TouchableOpacity
-          style={styles.navItem}
-          onPress={() => setActiveMode('pdf_to_image')}
-          activeOpacity={0.7}
-        >
-          <MaterialIcons
-            name="photo-library"
-            size={24}
-            color={activeMode === 'pdf_to_image' ? '#4f46e5' : '#94a3b8'}
-          />
-          <Text
-            style={[
-              styles.navLabel,
-              activeMode === 'pdf_to_image' && styles.navLabelActive
-            ]}
+        {/* Bottom Navigation Bar */}
+        <View style={styles.bottomNav}>
+          <TouchableOpacity
+            style={styles.navItem}
+            onPress={() => setActiveMode('pdf_to_image')}
+            activeOpacity={0.7}
           >
-            PDF ke Gambar
-          </Text>
-        </TouchableOpacity>
+            <MaterialIcons
+              name="photo-library"
+              size={24}
+              color={activeMode === 'pdf_to_image' ? '#4f46e5' : '#94a3b8'}
+            />
+            <Text
+              style={[
+                styles.navLabel,
+                activeMode === 'pdf_to_image' && styles.navLabelActive
+              ]}
+            >
+              PDF ke Gambar
+            </Text>
+          </TouchableOpacity>
 
-        <TouchableOpacity
-          style={styles.navItem}
-          onPress={() => setActiveMode('image_to_pdf')}
-          activeOpacity={0.7}
-        >
-          <MaterialIcons
-            name="picture-as-pdf"
-            size={24}
-            color={activeMode === 'image_to_pdf' ? '#4f46e5' : '#94a3b8'}
-          />
-          <Text
-            style={[
-              styles.navLabel,
-              activeMode === 'image_to_pdf' && styles.navLabelActive
-            ]}
+          <TouchableOpacity
+            style={styles.navItem}
+            onPress={() => setActiveMode('image_to_pdf')}
+            activeOpacity={0.7}
           >
-            Gambar ke PDF
-          </Text>
-        </TouchableOpacity>
-      </View>
-    </SafeAreaView>
+            <MaterialIcons
+              name="picture-as-pdf"
+              size={24}
+              color={activeMode === 'image_to_pdf' ? '#4f46e5' : '#94a3b8'}
+            />
+            <Text
+              style={[
+                styles.navLabel,
+                activeMode === 'image_to_pdf' && styles.navLabelActive
+              ]}
+            >
+              Gambar ke PDF
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    </SafeAreaProvider>
   );
 }
 
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#f8fafc',
-    paddingTop: Platform.OS === 'android' ? RNStatusBar.currentHeight : 0
+    backgroundColor: '#f8fafc'
   },
   content: {
     flex: 1
