@@ -1,0 +1,27 @@
+{
+  "name": "placeboo-document-converter",
+  "version": "1.0.0",
+  "description": "Placeboo / DocuMorph - Platform Konversi Dokumen Multi-Format Cepat & Aman",
+  "main": "index.html",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "serve": "npx serve ."
+  },
+  "keywords": [
+    "document-converter",
+    "pdf",
+    "stitch",
+    "placeboo",
+    "documorph"
+  ],
+  "author": "Placeboo",
+  "license": "MIT",
+  "devDependencies": {
+    "vite": "^5.0.0"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.118.0"
+  }
+}

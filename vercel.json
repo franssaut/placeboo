@@ -1,0 +1,10 @@
+{
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist",
+  "cleanUrls": true,
+  "rewrites": [
+    { "source": "/semua-alat", "destination": "/semua-alat.html" },
+    { "source": "/batch-queue", "destination": "/batch-queue.html" },
+    { "source": "/riwayat-unduhan", "destination": "/riwayat-unduhan.html" }
+  ]
+}
