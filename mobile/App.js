@@ -4,12 +4,20 @@ import {
   View,
   Text,
   TouchableOpacity,
-  Platform
+  Platform,
+  LogBox
 } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { MaterialIcons } from '@expo/vector-icons';
 import HomeScreen from './src/screens/HomeScreen';
+
+// Ignore non-fatal React Native blob warning from LogBox UI
+LogBox.ignoreLogs([
+  "Response.blob() is using React Native's Blob",
+  'Response.blob() is using React Native',
+  'Add the `expo-blob` package'
+]);
 
 export default function App() {
   const [activeMode, setActiveMode] = useState('pdf_to_image'); // 'pdf_to_image' | 'image_to_pdf'

@@ -44,7 +44,37 @@ function getStorageDirectory() {
  * Uses native fetch + FileReader to bypass Android Scoped Storage restrictions
  */
 async function readFileAsBase64(uri) {
-  // Method 1: React Native Native Networking fetch + FileReader (most reliable for DocumentPicker on Android)
+  // Method 1: Direct native FileSystem readAsStringAsync (Fastest & avoids Response.blob overhead)
+  try {
+    if (FileSystemLegacy && typeof FileSystemLegacy.readAsStringAsync === 'function') {
+      return await FileSystemLegacy.readAsStringAsync(uri, {
+        encoding: FileSystemLegacy.EncodingType?.Base64 || 'base64'
+      });
+    }
+  } catch (legacyErr) {
+    console.warn('[readFileAsBase64 legacy FS warn]:', legacyErr?.message);
+  }
+
+  // Method 2: Modern expo-file-system File class
+  try {
+    if (FileSystemNew && FileSystemNew.File) {
+      const f = new FileSystemNew.File(uri);
+      const buf = await f.arrayBuffer();
+      if (buf && buf.byteLength > 0) {
+        const bytes = new Uint8Array(buf);
+        let binary = '';
+        const len = bytes.byteLength;
+        for (let i = 0; i < len; i++) {
+          binary += String.fromCharCode(bytes[i]);
+        }
+        return btoa(binary);
+      }
+    }
+  } catch (newFsErr) {
+    console.warn('[readFileAsBase64 modern FS warn]:', newFsErr?.message);
+  }
+
+  // Method 3: Fallback native fetch + FileReader
   try {
     const base64 = await new Promise((resolve, reject) => {
       fetch(uri)
@@ -78,36 +108,6 @@ async function readFileAsBase64(uri) {
     console.warn('[readFileAsBase64 fetch method warn]:', fetchErr?.message);
   }
 
-  // Method 2: Modern expo-file-system File class
-  try {
-    if (FileSystemNew && FileSystemNew.File) {
-      const f = new FileSystemNew.File(uri);
-      const buf = await f.arrayBuffer();
-      if (buf && buf.byteLength > 0) {
-        const bytes = new Uint8Array(buf);
-        let binary = '';
-        const len = bytes.byteLength;
-        for (let i = 0; i < len; i++) {
-          binary += String.fromCharCode(bytes[i]);
-        }
-        return btoa(binary);
-      }
-    }
-  } catch (newFsErr) {
-    console.warn('[readFileAsBase64 modern FS warn]:', newFsErr?.message);
-  }
-
-  // Method 3: Legacy readAsStringAsync
-  try {
-    if (FileSystemLegacy && typeof FileSystemLegacy.readAsStringAsync === 'function') {
-      return await FileSystemLegacy.readAsStringAsync(uri, {
-        encoding: FileSystemLegacy.EncodingType?.Base64 || 'base64'
-      });
-    }
-  } catch (legacyErr) {
-    console.warn('[readFileAsBase64 legacy FS warn]:', legacyErr?.message);
-  }
-
   return '';
 }
 
@@ -115,13 +115,15 @@ async function readFileAsBase64(uri) {
  * Universal text reader
  */
 async function readTextFile(uri) {
-  // Method 1: React Native native fetch
+  // Method 1: Legacy FileSystem readAsStringAsync (Direct & fastest)
   try {
-    const res = await fetch(uri);
-    const text = await res.text();
-    if (text) return text;
-  } catch (e) {
-    console.warn('[readTextFile fetch warn]:', e?.message);
+    if (FileSystemLegacy && typeof FileSystemLegacy.readAsStringAsync === 'function') {
+      return await FileSystemLegacy.readAsStringAsync(uri, {
+        encoding: FileSystemLegacy.EncodingType?.UTF8 || 'utf8'
+      });
+    }
+  } catch (err) {
+    console.warn('[readTextFile legacy FS warn]:', err?.message);
   }
 
   // Method 2: Modern expo-file-system
@@ -134,15 +136,13 @@ async function readTextFile(uri) {
     console.warn('[readTextFile modern FS warn]:', e?.message);
   }
 
-  // Method 3: Legacy FileSystem
+  // Method 3: Fallback native fetch
   try {
-    if (FileSystemLegacy && typeof FileSystemLegacy.readAsStringAsync === 'function') {
-      return await FileSystemLegacy.readAsStringAsync(uri, {
-        encoding: FileSystemLegacy.EncodingType?.UTF8 || 'utf8'
-      });
-    }
-  } catch (err) {
-    console.warn('[readTextFile legacy FS warn]:', err?.message);
+    const res = await fetch(uri);
+    const text = await res.text();
+    if (text) return text;
+  } catch (e) {
+    console.warn('[readTextFile fetch warn]:', e?.message);
   }
 
   return '';
