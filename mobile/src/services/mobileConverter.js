@@ -478,3 +478,47 @@ export async function shareFileNative(
     return false;
   }
 }
+
+/**
+ * Saves all individual page images to a user-selected folder (Downloads/Pictures) via SAF.
+ * Allows users to easily attach and send all images at once from WhatsApp Gallery.
+ */
+export async function saveAllPagesToStorage(pages, baseFileName = 'dokumen') {
+  try {
+    const saf = FileSystemLegacy.StorageAccessFramework || FileSystemNew.StorageAccessFramework;
+    if (!saf) {
+      return { success: false, error: 'Fitur penyimpanan folder tidak didukung pada sistem ini.' };
+    }
+
+    const permissions = await saf.requestDirectoryPermissionsAsync();
+    if (!permissions.granted) {
+      return { success: false, error: 'Pemilihan folder dibatalkan.' };
+    }
+
+    const directoryUri = permissions.directoryUri;
+    let savedCount = 0;
+
+    for (let i = 0; i < pages.length; i++) {
+      const page = pages[i];
+      const pageNum = page.pageNumber || i + 1;
+      const cleanBase = (baseFileName || 'dokumen').replace(/[^a-zA-Z0-9_-]/g, '_');
+      const fileName = `${cleanBase}_halaman_${pageNum}`;
+      const isJpeg = page.uri.endsWith('.jpg') || page.uri.endsWith('.jpeg');
+      const mime = isJpeg ? 'image/jpeg' : 'image/png';
+
+      const base64Data = await readFileAsBase64(page.uri);
+      if (!base64Data) continue;
+
+      const createdFileUri = await saf.createFileAsync(directoryUri, fileName, mime);
+      await saf.writeAsStringAsync(createdFileUri, base64Data, {
+        encoding: FileSystemLegacy.EncodingType?.Base64 || 'base64'
+      });
+      savedCount++;
+    }
+
+    return { success: true, count: savedCount };
+  } catch (err) {
+    console.error('[saveAllPagesToStorage Error]:', err);
+    return { success: false, error: err?.message || 'Gagal menyimpan berkas ke folder.' };
+  }
+}
