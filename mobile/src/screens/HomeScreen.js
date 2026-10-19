@@ -33,6 +33,18 @@ export default function HomeScreen({ mode = 'pdf_to_image', onModeChange }) {
   const [convertedResult, setConvertedResult] = useState(null);
   const [activePdfPageIdx, setActivePdfPageIdx] = useState(0);
   const [isSavingStorage, setIsSavingStorage] = useState(false);
+  const [selectedPageIndices, setSelectedPageIndices] = useState([]);
+
+  // Automatically select all pages when conversion completes
+  useEffect(() => {
+    if (convertedResult?.pages && convertedResult.pages.length > 0) {
+      setSelectedPageIndices(convertedResult.pages.map((_, i) => i));
+    } else if (convertedResult) {
+      setSelectedPageIndices([0]);
+    } else {
+      setSelectedPageIndices([]);
+    }
+  }, [convertedResult]);
 
   // Sync mode from parent if provided
   useEffect(() => {
@@ -250,33 +262,63 @@ export default function HomeScreen({ mode = 'pdf_to_image', onModeChange }) {
     }
   };
 
-  const handleShareSequentially = async () => {
+  const togglePageSelection = (idx) => {
+    setSelectedPageIndices((prev) => {
+      if (prev.includes(idx)) {
+        return prev.filter((i) => i !== idx);
+      } else {
+        return [...prev, idx].sort((a, b) => a - b);
+      }
+    });
+  };
+
+  const handleSelectAllPages = () => {
+    if (convertedResult?.pages) {
+      setSelectedPageIndices(convertedResult.pages.map((_, i) => i));
+    }
+  };
+
+  const handleDeselectAllPages = () => {
+    setSelectedPageIndices([]);
+  };
+
+  const handleShareSelectedPages = async () => {
     if (!convertedResult?.pages || convertedResult.pages.length === 0) {
       await handleSharePage(0);
       return;
     }
 
     const pages = convertedResult.pages;
+    const selectedList = pages.filter((_, idx) => selectedPageIndices.includes(idx));
+
+    if (selectedList.length === 0) {
+      Alert.alert(
+        'Pilih Halaman Terlebih Dahulu',
+        'Silakan centang minimal 1 lembar halaman pada daftar di bawah untuk dikirim ke WhatsApp.'
+      );
+      return;
+    }
+
     const mime =
       convertedResult.mimeType ||
       (targetFormat === 'PNG' ? 'image/png' : 'image/jpeg');
 
-    for (let i = 0; i < pages.length; i++) {
-      setActivePdfPageIdx(i);
-      const pageNum = pages[i].pageNumber || i + 1;
-      const title = `Kirim Halaman ${pageNum} (${i + 1}/${pages.length}) ke WhatsApp`;
+    for (let i = 0; i < selectedList.length; i++) {
+      const page = selectedList[i];
+      const pageNum = page.pageNumber || i + 1;
+      const title = `Kirim Halaman ${pageNum} (${i + 1}/${selectedList.length} Terpilih) ke WhatsApp`;
 
-      const success = await shareFileNative(pages[i].uri, mime, title);
+      const success = await shareFileNative(page.uri, mime, title);
       if (!success) {
         break;
       }
 
-      if (i < pages.length - 1) {
-        const nextNum = pages[i + 1].pageNumber || i + 2;
+      if (i < selectedList.length - 1) {
+        const nextNum = selectedList[i + 1].pageNumber || i + 2;
         const proceed = await new Promise((resolve) => {
           Alert.alert(
             `Halaman ${pageNum} Terkirim`,
-            `Lanjut kirim Halaman ${nextNum} dari ${pages.length} ke WhatsApp?`,
+            `Lanjut kirim Halaman ${nextNum} (${i + 2} dari ${selectedList.length} terpilih) ke WhatsApp?`,
             [
               { text: 'Selesai', style: 'cancel', onPress: () => resolve(false) },
               { text: `Kirim Hal. ${nextNum} ke WhatsApp`, onPress: () => resolve(true) }
@@ -290,32 +332,42 @@ export default function HomeScreen({ mode = 'pdf_to_image', onModeChange }) {
         }
       } else {
         Alert.alert(
-          'Semua Halaman Selesai',
-          `Seluruh ${pages.length} halaman gambar telah selesai dikirim ke WhatsApp.`
+          'Semua Halaman Terpilih Selesai',
+          `Seluruh ${selectedList.length} halaman gambar terpilih telah selesai dikirim ke WhatsApp.`
         );
       }
     }
   };
 
-  const handleSaveAllToDevice = async () => {
+  const handleSaveSelectedToDevice = async () => {
     if (!convertedResult) return;
     const pages =
       convertedResult.pages && convertedResult.pages.length > 0
         ? convertedResult.pages
         : [{ uri: convertedResult.uri, pageNumber: 1 }];
 
+    const selectedList = pages.filter((_, idx) => selectedPageIndices.includes(idx));
+
+    if (selectedList.length === 0) {
+      Alert.alert(
+        'Pilih Halaman Terlebih Dahulu',
+        'Silakan centang minimal 1 lembar halaman pada daftar di bawah untuk disimpan ke galeri.'
+      );
+      return;
+    }
+
     setIsSavingStorage(true);
     const cleanBaseName = selectedPdf?.name
       ? selectedPdf.name.replace(/\.[^/.]+$/, '')
       : 'dokumen_placeboo';
 
-    const res = await saveImagesDirectlyToGallery(pages, cleanBaseName);
+    const res = await saveImagesDirectlyToGallery(selectedList, cleanBaseName);
     setIsSavingStorage(false);
 
     if (res.success) {
       const msg = res.fallbackSAF
-        ? `Semua ${res.count} lembar foto berhasil disimpan ke folder penyimpanan ponsel Anda.\n\nAnda dapat membuka WhatsApp sekarang dan melampirkan seluruh foto dari galeri.`
-        : `Semua ${res.count} lembar foto berhasil disimpan langsung ke Galeri Foto ponsel Anda!\n\nAnda dapat membuka WhatsApp sekarang dan melampirkan seluruh foto langsung dari album Galeri.`;
+        ? `${res.count} lembar foto terpilih berhasil disimpan ke folder penyimpanan ponsel Anda.`
+        : `${res.count} lembar foto terpilih berhasil disimpan langsung ke Galeri Foto ponsel Anda!\n\nAnda dapat membuka WhatsApp sekarang dan melampirkan foto tersebut langsung dari album Galeri.`;
 
       Alert.alert(
         'Berhasil Disimpan ke Galeri!',
@@ -343,6 +395,7 @@ export default function HomeScreen({ mode = 'pdf_to_image', onModeChange }) {
     setConvertedResult(null);
     setProgress(0);
     setActivePdfPageIdx(0);
+    setSelectedPageIndices([]);
   };
 
   return (
@@ -697,11 +750,14 @@ export default function HomeScreen({ mode = 'pdf_to_image', onModeChange }) {
 
             {isPdfToImage && convertedResult.pages && convertedResult.pages.length > 1 ? (
               <View style={styles.multiShareContainer}>
-                {/* 1. Tombol Utama: Simpan Langsung Semua File di Galeri HP */}
+                {/* 1. Tombol Simpan Halaman Terpilih di Galeri */}
                 <TouchableOpacity
-                  style={styles.btnSaveAllStorage}
-                  onPress={handleSaveAllToDevice}
-                  disabled={isSavingStorage}
+                  style={[
+                    styles.btnSaveAllStorage,
+                    selectedPageIndices.length === 0 && styles.btnActionDisabled
+                  ]}
+                  onPress={handleSaveSelectedToDevice}
+                  disabled={isSavingStorage || selectedPageIndices.length === 0}
                   activeOpacity={0.8}
                 >
                   {isSavingStorage ? (
@@ -711,27 +767,55 @@ export default function HomeScreen({ mode = 'pdf_to_image', onModeChange }) {
                   )}
                   <View style={styles.btnSaveAllStorageContent}>
                     <Text style={styles.btnSaveAllStorageTitle}>
-                      Simpan Langsung Semua File di Galeri
+                      {selectedPageIndices.length === convertedResult.pages.length
+                        ? `Simpan Semua ${convertedResult.pages.length} File di Galeri`
+                        : selectedPageIndices.length > 0
+                        ? `Simpan ${selectedPageIndices.length} Halaman Terpilih di Galeri`
+                        : 'Pilih Halaman untuk Disimpan di Galeri'}
                     </Text>
                     <Text style={styles.btnSaveAllStorageSub}>
-                      Simpan {convertedResult.pages.length} lembar foto langsung ke Galeri HP (tanpa ribet pilih folder)
+                      {selectedPageIndices.length > 0
+                        ? `Simpan ${
+                            selectedPageIndices.length === convertedResult.pages.length
+                              ? 'seluruh lembar'
+                              : `Hal. ${selectedPageIndices
+                                  .map((i) => convertedResult.pages[i]?.pageNumber || i + 1)
+                                  .join(', ')}`
+                          } langsung ke Galeri HP (tanpa ribet pilih folder)`
+                        : 'Centang halaman di bawah yang ingin Anda simpan ke galeri'}
                     </Text>
                   </View>
                 </TouchableOpacity>
 
-                {/* 2. Tombol Kirim Semua Halaman ke WhatsApp Secara Berurutan */}
+                {/* 2. Tombol Kirim Halaman Terpilih ke WhatsApp */}
                 <TouchableOpacity
-                  style={styles.btnShareWhatsAppPrimary}
-                  onPress={handleShareSequentially}
+                  style={[
+                    styles.btnShareWhatsAppPrimary,
+                    selectedPageIndices.length === 0 && styles.btnActionDisabled
+                  ]}
+                  onPress={handleShareSelectedPages}
+                  disabled={selectedPageIndices.length === 0}
                   activeOpacity={0.8}
                 >
                   <FontAwesome name="whatsapp" size={26} color="#ffffff" />
                   <View style={styles.btnShareWhatsAppPrimaryContent}>
                     <Text style={styles.btnShareWhatsAppPrimaryTitle}>
-                      Kirim Semua Halaman ke WhatsApp
+                      {selectedPageIndices.length === convertedResult.pages.length
+                        ? 'Kirim Semua Halaman ke WhatsApp'
+                        : selectedPageIndices.length > 0
+                        ? `Kirim ${selectedPageIndices.length} Halaman Terpilih ke WhatsApp`
+                        : 'Pilih Halaman untuk Dikirim ke WhatsApp'}
                     </Text>
                     <Text style={styles.btnShareWhatsAppPrimarySub}>
-                      Kirim lembar 1 sampai {convertedResult.pages.length} satu per satu (bukan 1 halaman panjang)
+                      {selectedPageIndices.length > 0
+                        ? `Kirim ${
+                            selectedPageIndices.length === convertedResult.pages.length
+                              ? 'semua lembar'
+                              : `Hal. ${selectedPageIndices
+                                  .map((i) => convertedResult.pages[i]?.pageNumber || i + 1)
+                                  .join(', ')}`
+                          } satu per satu (bukan 1 halaman panjang)`
+                        : 'Centang halaman di bawah yang ingin Anda kirim ke WhatsApp'}
                     </Text>
                   </View>
                 </TouchableOpacity>
@@ -748,28 +832,80 @@ export default function HomeScreen({ mode = 'pdf_to_image', onModeChange }) {
                   </Text>
                 </TouchableOpacity>
 
-                {/* 4. Daftar Setiap Lembar Halaman PDF */}
+                {/* 4. Fitur Pilih Halaman Mana Saja yang Bisa Dikirim */}
                 <View style={styles.pagesListSection}>
-                  <View style={styles.pagesListHeader}>
-                    <MaterialIcons name="collections" size={18} color="#0f172a" />
-                    <Text style={styles.pagesListTitle}>
-                      Daftar Lembar Halaman Terpisah ({convertedResult.pages.length} Halaman)
-                    </Text>
+                  <View style={styles.pagesListHeaderRow}>
+                    <View style={styles.pagesListHeaderTitleGroup}>
+                      <MaterialIcons name="checklist" size={20} color="#0f172a" />
+                      <Text style={styles.pagesListTitle}>
+                        Pilih Lembar Halaman ({selectedPageIndices.length}/{convertedResult.pages.length} Terpilih)
+                      </Text>
+                    </View>
+
+                    <View style={styles.selectionQuickButtons}>
+                      <TouchableOpacity
+                        style={[
+                          styles.quickSelectBtn,
+                          selectedPageIndices.length === convertedResult.pages.length && styles.quickSelectBtnActive
+                        ]}
+                        onPress={
+                          selectedPageIndices.length === convertedResult.pages.length
+                            ? handleDeselectAllPages
+                            : handleSelectAllPages
+                        }
+                        activeOpacity={0.7}
+                      >
+                        <MaterialIcons
+                          name={
+                            selectedPageIndices.length === convertedResult.pages.length
+                              ? 'check-box'
+                              : 'done-all'
+                          }
+                          size={14}
+                          color={
+                            selectedPageIndices.length === convertedResult.pages.length
+                              ? '#ffffff'
+                              : '#4f46e5'
+                          }
+                        />
+                        <Text
+                          style={[
+                            styles.quickSelectBtnText,
+                            selectedPageIndices.length === convertedResult.pages.length &&
+                              styles.quickSelectBtnTextActive
+                          ]}
+                        >
+                          {selectedPageIndices.length === convertedResult.pages.length
+                            ? 'Batal Semua'
+                            : 'Pilih Semua'}
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
                   </View>
+
                   <Text style={styles.pagesListSub}>
-                    Ketuk tombol pada lembar mana saja untuk langsung mengirim gambar halaman tersebut ke WhatsApp:
+                    Ketuk lembar foto mana saja untuk memilih/mencentang halaman yang ingin dikirim:
                   </Text>
 
                   <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.pagesListScroll}>
                     {convertedResult.pages.map((p, idx) => {
                       const isActive = idx === activePdfPageIdx;
+                      const isSelected = selectedPageIndices.includes(idx);
+
                       return (
                         <View
                           key={idx}
-                          style={[styles.pageCard, isActive && styles.pageCardActive]}
+                          style={[
+                            styles.pageCard,
+                            isSelected && styles.pageCardSelected,
+                            isActive && styles.pageCardActive
+                          ]}
                         >
                           <TouchableOpacity
-                            onPress={() => setActivePdfPageIdx(idx)}
+                            onPress={() => {
+                              setActivePdfPageIdx(idx);
+                              togglePageSelection(idx);
+                            }}
                             style={styles.pageCardPreviewArea}
                             activeOpacity={0.7}
                           >
@@ -778,13 +914,54 @@ export default function HomeScreen({ mode = 'pdf_to_image', onModeChange }) {
                               style={styles.pageCardThumb}
                               resizeMode="contain"
                             />
-                            <View style={[styles.pageCardBadge, isActive && styles.pageCardBadgeActive]}>
-                              <Text style={[styles.pageCardBadgeText, isActive && styles.pageCardBadgeTextActive]}>
+
+                            {/* Badge Nomor Halaman di Kiri Atas */}
+                            <View
+                              style={[
+                                styles.pageCardBadge,
+                                isSelected && styles.pageCardBadgeSelected
+                              ]}
+                            >
+                              <Text style={styles.pageCardBadgeText}>
                                 Hal. {p.pageNumber}
+                              </Text>
+                            </View>
+
+                            {/* Checkbox Pilihan Halaman di Kanan Atas */}
+                            <View
+                              style={[
+                                styles.pageCardCheckbox,
+                                isSelected && styles.pageCardCheckboxSelected
+                              ]}
+                            >
+                              <MaterialIcons
+                                name={isSelected ? 'check' : 'add'}
+                                size={14}
+                                color={isSelected ? '#ffffff' : '#64748b'}
+                              />
+                            </View>
+
+                            {/* Label Status Terpilih */}
+                            <View
+                              style={[
+                                styles.pageSelectionLabel,
+                                isSelected
+                                  ? styles.pageSelectionLabelActive
+                                  : styles.pageSelectionLabelInactive
+                              ]}
+                            >
+                              <Text
+                                style={[
+                                  styles.pageSelectionLabelText,
+                                  isSelected && styles.pageSelectionLabelTextActive
+                                ]}
+                              >
+                                {isSelected ? '✓ Terpilih' : '+ Ketuk utk Pilih'}
                               </Text>
                             </View>
                           </TouchableOpacity>
 
+                          {/* Tombol Cepat Kirim Halaman Ini Saja */}
                           <TouchableOpacity
                             style={styles.btnShareCard}
                             onPress={() => handleSharePage(idx)}
@@ -792,7 +969,7 @@ export default function HomeScreen({ mode = 'pdf_to_image', onModeChange }) {
                           >
                             <FontAwesome name="whatsapp" size={13} color="#ffffff" />
                             <Text style={styles.btnShareCardText}>
-                              Kirim ke WA
+                              Kirim Hal. {p.pageNumber}
                             </Text>
                           </TouchableOpacity>
                         </View>
@@ -812,7 +989,7 @@ export default function HomeScreen({ mode = 'pdf_to_image', onModeChange }) {
                 {isPdfToImage && (
                   <TouchableOpacity
                     style={styles.btnSaveAllStorage}
-                    onPress={handleSaveAllToDevice}
+                    onPress={handleSaveSelectedToDevice}
                     disabled={isSavingStorage}
                     activeOpacity={0.8}
                   >
@@ -1535,46 +1712,83 @@ const styles = StyleSheet.create({
     fontSize: 11,
     marginTop: 2
   },
+  btnActionDisabled: {
+    opacity: 0.55
+  },
   pagesListSection: {
     backgroundColor: '#f8fafc',
     borderWidth: 1,
     borderColor: '#e2e8f0',
     borderRadius: 12,
     padding: 12,
-    gap: 6
+    gap: 8
   },
-  pagesListHeader: {
+  pagesListHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between'
+  },
+  pagesListHeaderTitleGroup: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6
   },
   pagesListTitle: {
     fontSize: 13,
-    fontWeight: '700',
+    fontWeight: '800',
     color: '#0f172a'
+  },
+  selectionQuickButtons: {
+    flexDirection: 'row',
+    alignItems: 'center'
+  },
+  quickSelectBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    backgroundColor: '#eef2ff',
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#c7d2fe'
+  },
+  quickSelectBtnActive: {
+    backgroundColor: '#4f46e5',
+    borderColor: '#4338ca'
+  },
+  quickSelectBtnText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#4f46e5'
+  },
+  quickSelectBtnTextActive: {
+    color: '#ffffff'
   },
   pagesListSub: {
     fontSize: 11,
-    color: '#64748b',
-    marginBottom: 6
+    color: '#64748b'
   },
   pagesListScroll: {
     paddingVertical: 4
   },
   pageCard: {
-    width: 120,
+    width: 126,
     marginRight: 10,
     backgroundColor: '#ffffff',
     borderWidth: 1.5,
     borderColor: '#e2e8f0',
-    borderRadius: 8,
+    borderRadius: 10,
     padding: 6,
     alignItems: 'center',
     gap: 6
   },
   pageCardActive: {
-    borderColor: '#059669',
-    backgroundColor: '#ecfdf5'
+    borderColor: '#4f46e5'
+  },
+  pageCardSelected: {
+    borderColor: '#10b981',
+    backgroundColor: '#f0fdf4'
   },
   pageCardPreviewArea: {
     width: '100%',
@@ -1582,8 +1796,8 @@ const styles = StyleSheet.create({
   },
   pageCardThumb: {
     width: '100%',
-    height: 115,
-    borderRadius: 4,
+    height: 120,
+    borderRadius: 6,
     backgroundColor: '#f1f5f9'
   },
   pageCardBadge: {
@@ -1591,27 +1805,68 @@ const styles = StyleSheet.create({
     top: 4,
     left: 4,
     backgroundColor: 'rgba(15, 23, 42, 0.75)',
-    paddingHorizontal: 5,
+    paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 4
   },
-  pageCardBadgeActive: {
-    backgroundColor: '#059669'
+  pageCardBadgeSelected: {
+    backgroundColor: '#047857'
   },
   pageCardBadgeText: {
     color: '#ffffff',
     fontSize: 9,
-    fontWeight: '700'
+    fontWeight: '800'
   },
-  pageCardBadgeTextActive: {
-    color: '#ffffff'
+  pageCardCheckbox: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: '#ffffff',
+    borderWidth: 1.5,
+    borderColor: '#94a3b8',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.15,
+    shadowRadius: 2,
+    elevation: 2
+  },
+  pageCardCheckboxSelected: {
+    backgroundColor: '#10b981',
+    borderColor: '#059669'
+  },
+  pageSelectionLabel: {
+    width: '100%',
+    paddingVertical: 3,
+    borderRadius: 4,
+    marginTop: 4,
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  pageSelectionLabelActive: {
+    backgroundColor: '#dcfce7'
+  },
+  pageSelectionLabelInactive: {
+    backgroundColor: '#f1f5f9'
+  },
+  pageSelectionLabelText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#64748b'
+  },
+  pageSelectionLabelTextActive: {
+    color: '#15803d'
   },
   btnShareCard: {
     width: '100%',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 5,
+    gap: 4,
     backgroundColor: '#25D366',
     paddingVertical: 7,
     borderRadius: 6
