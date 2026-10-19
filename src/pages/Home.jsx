@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 
 export default function Home() {
-  const { addJobs, formatBytes, showToast, triggerDownload } = useApp();
+  const { addJobs, formatBytes, showToast, triggerDownload, convertAndCacheBlob } = useApp();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const fileInputRef = useRef(null);
@@ -109,35 +109,51 @@ export default function Home() {
       return;
     }
 
-    // Single mode instant conversion on home page
+    // Single mode: run REAL conversion immediately
     setIsConvertingHome(true);
-    setHomeProgress(15);
+    setHomeProgress(10);
 
-    const createdJobs = await addJobs(filesToProcess, targetFormat);
-    const currentJob = createdJobs[0] || {
-      name: filesToProcess[0].name,
-      filename: filesToProcess[0].name,
-      source_format: 'DOCX',
-      target_format: targetFormat
-    };
-    if (filesToProcess[0]) {
-      currentJob.rawFile = filesToProcess[0];
-    }
+    try {
+      // Step 1: Register the job and cache the raw file
+      setHomeProgress(15);
+      const createdJobs = await addJobs(filesToProcess, targetFormat);
+      const currentJob = createdJobs[0] || {
+        name: filesToProcess[0].name,
+        filename: filesToProcess[0].name,
+        source_format: 'DOCX',
+        target_format: targetFormat
+      };
 
-    // Animate progress smoothly
-    let p = 20;
-    const interval = setInterval(() => {
-      p += 25;
-      if (p >= 100) {
-        clearInterval(interval);
+      // Attach the raw file directly
+      if (filesToProcess[0]) {
+        currentJob.rawFile = filesToProcess[0];
+      }
+
+      setHomeProgress(30);
+
+      // Step 2: Run the REAL conversion NOW (not on download)
+      const resultBlob = await convertAndCacheBlob(
+        filesToProcess[0],           // actual raw File from user
+        targetFormat,                // target format
+        currentJob.id                // job id for caching
+      );
+
+      setHomeProgress(85);
+
+      if (resultBlob && resultBlob.size > 0) {
         setHomeProgress(100);
         setIsConvertingHome(false);
         setLastConvertedJob(currentJob);
         showToast('Konversi berhasil! Berkas siap diunduh.', 'success');
       } else {
-        setHomeProgress(p);
+        throw new Error('Conversion produced empty result');
       }
-    }, 280);
+    } catch (err) {
+      console.error('[handleStartConversion Error]:', err);
+      setHomeProgress(0);
+      setIsConvertingHome(false);
+      showToast('Gagal mengonversi berkas. Silakan coba lagi atau pilih format target lain.', 'error');
+    }
   };
 
   const handleQuickDownload = (job) => {

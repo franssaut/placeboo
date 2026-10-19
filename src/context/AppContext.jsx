@@ -17,6 +17,9 @@ const AppContext = createContext();
 // In-memory cache for user's actual uploaded File / Blob objects
 const rawFileCache = new Map();
 
+// In-memory cache for already-converted output Blobs (keyed by job.id)
+const blobCache = new Map();
+
 // Helper to guarantee consistent object shape across all screens
 export const normalizeJob = (raw, defaultSessionId = 'DM-DEFAULT') => {
   const name = raw?.filename || raw?.file_name || raw?.name || 'Dokumen_Konversi.pdf';
@@ -191,9 +194,55 @@ export const AppProvider = ({ children }) => {
   };
 
   /**
+   * Run REAL conversion on a job's rawFile and cache the output blob.
+   * Called eagerly from Home.jsx when the user clicks "Convert",
+   * so the blob is already ready when they click "Download".
+   * Returns the blob or null on error.
+   */
+  const convertAndCacheBlob = async (jobOrFile, targetFormat = 'PDF', jobId = null) => {
+    try {
+      let rawFile = null;
+      let sourceFormat = 'DOCX';
+      let filename = 'Dokumen_Konversi';
+
+      if (jobOrFile instanceof Blob || jobOrFile instanceof File) {
+        rawFile = jobOrFile;
+        filename = rawFile.name || filename;
+        sourceFormat = filename.includes('.') ? filename.split('.').pop().toUpperCase() : 'DOC';
+      } else if (jobOrFile && typeof jobOrFile === 'object') {
+        const id = jobOrFile.id || jobId;
+        rawFile = jobOrFile.rawFile || (id ? rawFileCache.get(id) : null);
+        filename = jobOrFile.filename || jobOrFile.file_name || jobOrFile.name || filename;
+        sourceFormat = (jobOrFile.source_format || (filename.includes('.') ? filename.split('.').pop() : 'DOC')).toUpperCase();
+      }
+
+      let blob = null;
+
+      if (rawFile && (rawFile instanceof Blob || rawFile instanceof File)) {
+        blob = await performRealConversion(rawFile, targetFormat);
+      }
+
+      if (!blob) {
+        blob = await generateConvertedBlob(filename, sourceFormat, targetFormat);
+      }
+
+      // Cache the result
+      const cacheId = jobId || (jobOrFile && jobOrFile.id);
+      if (cacheId && blob) {
+        blobCache.set(cacheId, blob);
+      }
+
+      return blob;
+    } catch (err) {
+      console.error('[convertAndCacheBlob Error]:', err);
+      return null;
+    }
+  };
+
+  /**
    * Universal trigger download handler:
-   * Performs REAL client-side conversion on uploaded user files (jsPDF, pdf-lib, docx, SheetJS, JSZip)
-   * or falls back to valid compliant document templates with exact MIME types.
+   * Uses cached blob from convertAndCacheBlob if available,
+   * otherwise runs REAL conversion on the spot.
    */
   const triggerDownload = async (target) => {
     try {
@@ -222,8 +271,13 @@ export const AppProvider = ({ children }) => {
 
       let blob = null;
 
-      // Special case: Batch ZIP download
-      if (filename.toLowerCase().endsWith('.zip') || targetFormat === 'ZIP') {
+      // 1. Check if we already have a pre-converted blob cached
+      if (jobId && blobCache.has(jobId)) {
+        blob = blobCache.get(jobId);
+      }
+
+      // 2. Special case: Batch ZIP download
+      if (!blob && (filename.toLowerCase().endsWith('.zip') || targetFormat === 'ZIP')) {
         try {
           const zipFiles = [];
           for (const item of conversions) {
@@ -233,10 +287,11 @@ export const AppProvider = ({ children }) => {
               const itemBase = (item.filename || item.name || 'Dokumen').replace(/\.[^/.]+$/, '');
               const itemFileName = `${itemBase}.${itemTargetExt.toLowerCase()}`;
               try {
-                let itemBlob = null;
-                if (itemRaw) {
+                let itemBlob = blobCache.get(item.id) || null;
+                if (!itemBlob && itemRaw) {
                   itemBlob = await performRealConversion(itemRaw, itemTargetExt);
-                } else {
+                }
+                if (!itemBlob) {
                   itemBlob = await generateConvertedBlob(itemFileName, item.source_format || 'DOCX', itemTargetExt);
                 }
                 if (itemBlob) {
@@ -252,20 +307,23 @@ export const AppProvider = ({ children }) => {
           console.warn('[Zip generation error]:', zipErr);
           blob = await generateConvertedBlob(filename, sourceFormat, 'ZIP');
         }
-      } else if (rawFile) {
-        // Real conversion of uploaded user file
+      }
+
+      // 3. Real conversion of uploaded user file
+      if (!blob && rawFile && (rawFile instanceof Blob || rawFile instanceof File)) {
         try {
           blob = await performRealConversion(rawFile, targetFormat);
         } catch (convErr) {
           console.warn('[Real conversion fallback]:', convErr);
-          blob = await generateConvertedBlob(filename, sourceFormat, targetFormat);
         }
-      } else {
-        // Fallback or sample document conversion
+      }
+
+      // 4. Last resort: generate a compliant template document
+      if (!blob) {
         try {
-          blob = await performRealConversion({ filename, name: filename, source_format: sourceFormat }, targetFormat);
-        } catch (e) {
           blob = await generateConvertedBlob(filename, sourceFormat, targetFormat);
+        } catch (e) {
+          console.error('[generateConvertedBlob fallback error]:', e);
         }
       }
 
@@ -418,6 +476,7 @@ export const AppProvider = ({ children }) => {
 
   const deleteJob = async (id) => {
     rawFileCache.delete(id);
+    blobCache.delete(id);
     setConversions(prev => prev.filter(item => item.id !== id));
     if (supabaseStatus === 'connected') {
       try {
@@ -429,6 +488,7 @@ export const AppProvider = ({ children }) => {
 
   const purgeAll = async () => {
     rawFileCache.clear();
+    blobCache.clear();
     setConversions([]);
     if (supabaseStatus === 'connected') {
       try {
@@ -457,7 +517,8 @@ export const AppProvider = ({ children }) => {
         deleteJob,
         purgeAll,
         formatBytes,
-        triggerDownload
+        triggerDownload,
+        convertAndCacheBlob
       }}
     >
       {children}

@@ -16,6 +16,22 @@ import {
  * Performs 100% genuine client-side transcoding across documents, spreadsheets, images, and archives.
  */
 
+// Shared PDF.js instance with explicit worker configuration
+let pdfjsLib = null;
+
+export async function getPdfJs() {
+  if (pdfjsLib) return pdfjsLib;
+  const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
+  if (typeof window !== 'undefined') {
+    // In browser: serve worker from web root with unpkg fallback
+    pdfjs.GlobalWorkerOptions.workerSrc = window.location.origin + '/pdf.worker.mjs';
+  } else {
+    pdfjs.GlobalWorkerOptions.workerSrc = './public/pdf.worker.mjs';
+  }
+  pdfjsLib = pdfjs;
+  return pdfjsLib;
+}
+
 /**
  * Reads a File or Blob as a Data URL string
  */
@@ -307,13 +323,20 @@ export async function convertDocxToPdf(file, filename = 'document.pdf') {
 }
 
 /**
- * 6. REAL PDF TEXT EXTRACTOR (Uses pdfjs-dist legacy build)
+ * 6. REAL PDF TEXT EXTRACTOR (Uses pdfjs-dist legacy build with fonts & cmaps)
  */
 export async function extractTextFromPdf(file) {
   try {
     const buffer = await readFileAsArrayBuffer(file);
-    const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
-    const loadingTask = pdfjs.getDocument({ data: new Uint8Array(buffer) });
+    if (!buffer || buffer.byteLength === 0) return [];
+
+    const pdfjs = await getPdfJs();
+    const loadingTask = pdfjs.getDocument({
+      data: new Uint8Array(buffer),
+      cMapUrl: 'https://unpkg.com/pdfjs-dist@6.4.299/cmaps/',
+      cMapPacked: true,
+      standardFontDataUrl: 'https://unpkg.com/pdfjs-dist@6.4.299/standard_fonts/'
+    });
     const pdfDoc = await loadingTask.promise;
     const extractedParagraphs = [];
 
@@ -507,35 +530,133 @@ export async function convertPdfToExcel(file, filename = 'document.xlsx') {
 }
 
 /**
- * 10. REAL PDF TO IMAGE CONVERTER
+ * 10. REAL PDF TO IMAGE CONVERTER (PNG / JPG / WEBP)
+ * Supports multi-page PDFs by stitching pages vertically with high-res 2x scaling
+ * Fills pure white background so JPEGs never turn black
  */
 export async function convertPdfToImage(file, targetExt = 'PNG') {
   try {
     const buffer = await readFileAsArrayBuffer(file);
-    const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
-    const loadingTask = pdfjs.getDocument({ data: new Uint8Array(buffer) });
+    if (!buffer || buffer.byteLength === 0) {
+      return generateImageBlob(file.name || 'document.png', targetExt.toLowerCase());
+    }
+
+    const pdfjs = await getPdfJs();
+    const loadingTask = pdfjs.getDocument({
+      data: new Uint8Array(buffer),
+      cMapUrl: 'https://unpkg.com/pdfjs-dist@6.4.299/cmaps/',
+      cMapPacked: true,
+      standardFontDataUrl: 'https://unpkg.com/pdfjs-dist@6.4.299/standard_fonts/'
+    });
+
     const pdfDoc = await loadingTask.promise;
-    const page = await pdfDoc.getPage(1);
+    const numPages = pdfDoc.numPages;
 
-    const viewport = page.getViewport({ scale: 2.0 });
-    const canvas = document.createElement('canvas');
-    canvas.width = viewport.width;
-    canvas.height = viewport.height;
-    const ctx = canvas.getContext('2d');
+    if (numPages === 0) {
+      return generateImageBlob(file.name || 'document.png', targetExt.toLowerCase());
+    }
 
-    await page.render({
-      canvasContext: ctx,
-      viewport: viewport
-    }).promise;
+    const scale = 2.0; // High-resolution crisp 2x scale
+    const mime = targetExt.toUpperCase() === 'JPG' || targetExt.toUpperCase() === 'JPEG'
+      ? 'image/jpeg'
+      : (targetExt.toUpperCase() === 'WEBP' ? 'image/webp' : 'image/png');
 
-    const mime = targetExt.toUpperCase() === 'JPG' || targetExt.toUpperCase() === 'JPEG' ? 'image/jpeg' : 'image/png';
-    return new Promise((resolve) => {
-      canvas.toBlob((blob) => {
-        resolve(blob || file);
+    // Single Page PDF
+    if (numPages === 1) {
+      const page = await pdfDoc.getPage(1);
+      const viewport = page.getViewport({ scale });
+
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.floor(viewport.width);
+      canvas.height = Math.floor(viewport.height);
+      const ctx = canvas.getContext('2d');
+
+      // Crucial: fill with white background so JPG does not turn black
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      await page.render({
+        canvasContext: ctx,
+        viewport: viewport
+      }).promise;
+
+      return await new Promise((resolve) => {
+        canvas.toBlob((blob) => {
+          if (blob) {
+            resolve(blob);
+          } else {
+            try {
+              const dataUrl = canvas.toDataURL(mime, 0.95);
+              const byteString = atob(dataUrl.split(',')[1]);
+              const ab = new ArrayBuffer(byteString.length);
+              const ia = new Uint8Array(ab);
+              for (let i = 0; i < byteString.length; i++) {
+                ia[i] = byteString.charCodeAt(i);
+              }
+              resolve(new Blob([ab], { type: mime }));
+            } catch (e) {
+              resolve(generateImageBlob(file.name || 'document.png', targetExt.toLowerCase()));
+            }
+          }
+        }, mime, 0.95);
+      });
+    }
+
+    // Multi-page PDF: render all pages vertically stitched with neutral dividers
+    const pageCanvases = [];
+    let totalHeight = 0;
+    let maxWidth = 0;
+    const pageGap = 16;
+
+    for (let p = 1; p <= numPages; p++) {
+      const page = await pdfDoc.getPage(p);
+      const viewport = page.getViewport({ scale });
+
+      const pCanvas = document.createElement('canvas');
+      pCanvas.width = Math.floor(viewport.width);
+      pCanvas.height = Math.floor(viewport.height);
+      const pCtx = pCanvas.getContext('2d');
+
+      pCtx.fillStyle = '#ffffff';
+      pCtx.fillRect(0, 0, pCanvas.width, pCanvas.height);
+
+      await page.render({
+        canvasContext: pCtx,
+        viewport: viewport
+      }).promise;
+
+      pageCanvases.push(pCanvas);
+      maxWidth = Math.max(maxWidth, pCanvas.width);
+      totalHeight += pCanvas.height + (p < numPages ? pageGap : 0);
+    }
+
+    const stitchedCanvas = document.createElement('canvas');
+    stitchedCanvas.width = maxWidth;
+    stitchedCanvas.height = totalHeight;
+    const stitchedCtx = stitchedCanvas.getContext('2d');
+
+    stitchedCtx.fillStyle = '#f0f2f5';
+    stitchedCtx.fillRect(0, 0, maxWidth, totalHeight);
+
+    let currentY = 0;
+    for (let i = 0; i < pageCanvases.length; i++) {
+      const c = pageCanvases[i];
+      const offsetX = (maxWidth - c.width) / 2;
+      stitchedCtx.drawImage(c, offsetX, currentY);
+      currentY += c.height + pageGap;
+    }
+
+    return await new Promise((resolve) => {
+      stitchedCanvas.toBlob((blob) => {
+        if (blob) {
+          resolve(blob);
+        } else {
+          resolve(generateImageBlob(file.name || 'document.png', targetExt.toLowerCase()));
+        }
       }, mime, 0.95);
     });
   } catch (err) {
-    console.warn('[convertPdfToImage fallback]:', err);
+    console.error('[convertPdfToImage Error]:', err);
     return generateImageBlob(file.name || 'document.png', targetExt.toLowerCase());
   }
 }
@@ -678,9 +799,27 @@ export async function performRealConversion(file, targetFormat = 'PDF', options 
       return await convertPdfToExcel(file, fileName);
     }
 
-    // Case 7: PDF -> Image (PNG / JPG)
+    // Case 7: PDF -> Image (PNG / JPG / JPEG / WEBP)
     if (sourceExt === 'PDF' && ['PNG', 'JPG', 'JPEG', 'WEBP'].includes(targetExt)) {
       return await convertPdfToImage(file, targetExt);
+    }
+
+    // Case 7b: Word DOCX / DOC -> Image (PNG / JPG / JPEG / WEBP)
+    if (['DOCX', 'DOC'].includes(sourceExt) && ['PNG', 'JPG', 'JPEG', 'WEBP'].includes(targetExt)) {
+      const pdfBlob = await convertDocxToPdf(file, fileName);
+      return await convertPdfToImage(pdfBlob, targetExt);
+    }
+
+    // Case 7c: Excel XLSX / XLS / CSV -> Image (PNG / JPG / JPEG / WEBP)
+    if (['XLSX', 'XLS', 'CSV'].includes(sourceExt) && ['PNG', 'JPG', 'JPEG', 'WEBP'].includes(targetExt)) {
+      const pdfBlob = await convertExcelToPdf(file, fileName);
+      return await convertPdfToImage(pdfBlob, targetExt);
+    }
+
+    // Case 7d: Text TXT / MD / LOG -> Image (PNG / JPG / JPEG / WEBP)
+    if (['TXT', 'MD', 'LOG'].includes(sourceExt) && ['PNG', 'JPG', 'JPEG', 'WEBP'].includes(targetExt)) {
+      const pdfBlob = await convertTextToPdf(file, fileName);
+      return await convertPdfToImage(pdfBlob, targetExt);
     }
 
     // Case 8: Text / Markdown -> PDF

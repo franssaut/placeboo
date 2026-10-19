@@ -349,6 +349,8 @@ export async function generateConvertedBlob(filename, sourceFormat = 'DOCX', tar
     case 'JPG':
     case 'JPEG':
       return generateImageBlob(filename, 'jpg');
+    case 'WEBP':
+      return generateImageBlob(filename, 'webp');
     case 'ZIP':
       return await generateZipBlob(filename);
     default:
