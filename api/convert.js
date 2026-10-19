@@ -65,15 +65,26 @@ function calculateAutoFitCols(rows) {
   return colWidths;
 }
 
-// Real PDF to Image Renderer using pdfjs-dist and @napi-rs/canvas
+// Full-Fidelity Real PDF to Image Renderer using pdfjs-dist and @napi-rs/canvas
 async function renderPdfToImage(pdfBuffer, targetFormat = 'PNG') {
   try {
+    const fs = await import('fs');
+    const path = await import('path');
     const { createCanvas } = await import('@napi-rs/canvas');
     const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
 
+    // Use normalized file paths with forward slashes for local font and cmap data
+    const localFontDir = path.resolve('node_modules/pdfjs-dist/standard_fonts').split(path.sep).join('/') + '/';
+    const localCmapDir = path.resolve('node_modules/pdfjs-dist/cmaps').split(path.sep).join('/') + '/';
+    const hasLocalFonts = fs.existsSync(path.resolve('node_modules/pdfjs-dist/standard_fonts/LiberationSans-Regular.ttf'));
+
     const loadingTask = pdfjs.getDocument({
       data: new Uint8Array(pdfBuffer),
-      standardFontDataUrl: 'https://unpkg.com/pdfjs-dist@6.4.299/standard_fonts/'
+      standardFontDataUrl: hasLocalFonts ? localFontDir : 'https://unpkg.com/pdfjs-dist@6.4.299/standard_fonts/',
+      cMapUrl: hasLocalFonts ? localCmapDir : 'https://unpkg.com/pdfjs-dist@6.4.299/cmaps/',
+      cMapPacked: true,
+      enableXfa: true,
+      isEvalSupported: false
     });
 
     const pdfDoc = await loadingTask.promise;
@@ -83,70 +94,51 @@ async function renderPdfToImage(pdfBuffer, targetFormat = 'PNG') {
       return null;
     }
 
-    const scale = 1.8;
+    const scale = 2.0; // 2.0 scale ensures razor-sharp text and graphics
     const isJpg = targetFormat.toUpperCase() === 'JPG' || targetFormat.toUpperCase() === 'JPEG';
     const encodeFormat = isJpg ? 'jpeg' : 'png';
+    const ext = isJpg ? 'jpg' : 'png';
+    const mimeType = isJpg ? 'image/jpeg' : 'image/png';
+    const pages = [];
 
-    // Single page PDF
-    if (numPages === 1) {
-      const page = await pdfDoc.getPage(1);
-      const viewport = page.getViewport({ scale });
+    // Render every page with high fidelity, print intent, and form/annotation layers
+    for (let p = 1; p <= numPages; p++) {
+      const page = await pdfDoc.getPage(p);
+      const viewport = page.getViewport({ scale, rotation: page.rotate });
       const canvas = createCanvas(Math.floor(viewport.width), Math.floor(viewport.height));
       const ctx = canvas.getContext('2d');
 
+      // White background ensures clean document rendering
       ctx.fillStyle = '#ffffff';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-      await page.render({ canvasContext: ctx, viewport }).promise;
-      const imgBuffer = await canvas.encode(encodeFormat, isJpg ? 90 : undefined);
-      return {
-        buffer: imgBuffer,
-        mimeType: isJpg ? 'image/jpeg' : 'image/png',
-        ext: isJpg ? 'jpg' : 'png'
-      };
+      await page.render({
+        canvasContext: ctx,
+        viewport,
+        intent: 'print',
+        annotationMode: pdfjs.AnnotationMode?.ENABLE_STORAGE ?? 3
+      }).promise;
+
+      const pageImgBuffer = await canvas.encode(encodeFormat, isJpg ? 92 : undefined);
+      pages.push({
+        pageNumber: p,
+        buffer: pageImgBuffer,
+        base64: Buffer.from(pageImgBuffer).toString('base64'),
+        width: canvas.width,
+        height: canvas.height
+      });
     }
 
-    // Multi-page PDF: render pages stitched vertically
-    const pageCanvases = [];
-    let totalHeight = 0;
-    let maxWidth = 0;
-    const gap = 16;
-
-    for (let p = 1; p <= numPages; p++) {
-      const page = await pdfDoc.getPage(p);
-      const viewport = page.getViewport({ scale });
-      const c = createCanvas(Math.floor(viewport.width), Math.floor(viewport.height));
-      const ctx = c.getContext('2d');
-
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(0, 0, c.width, c.height);
-
-      await page.render({ canvasContext: ctx, viewport }).promise;
-      pageCanvases.push(c);
-      maxWidth = Math.max(maxWidth, c.width);
-      totalHeight += c.height + (p < numPages ? gap : 0);
-    }
-
-    const stitched = createCanvas(maxWidth, totalHeight);
-    const sCtx = stitched.getContext('2d');
-    sCtx.fillStyle = '#f1f5f9';
-    sCtx.fillRect(0, 0, maxWidth, totalHeight);
-
-    let curY = 0;
-    for (const pc of pageCanvases) {
-      const offsetX = Math.floor((maxWidth - pc.width) / 2);
-      sCtx.drawImage(pc, offsetX, curY);
-      curY += pc.height + gap;
-    }
-
-    const imgBuffer = await stitched.encode(encodeFormat, isJpg ? 90 : undefined);
     return {
-      buffer: imgBuffer,
-      mimeType: isJpg ? 'image/jpeg' : 'image/png',
-      ext: isJpg ? 'jpg' : 'png'
+      numPages,
+      pages,
+      primaryBuffer: pages[0].buffer,
+      primaryBase64: pages[0].base64,
+      mimeType,
+      ext
     };
   } catch (err) {
-    console.error('[renderPdfToImage Error]:', err?.message);
+    console.error('[renderPdfToImage Error]:', err?.message || err);
     return null;
   }
 }
@@ -576,10 +568,26 @@ export default async function handler(req, res) {
       } else if (sourceExt === 'pdf') {
         // Render real PDF document pages into high-resolution image
         const rendered = await renderPdfToImage(inputBuffer, targetFormat);
-        if (rendered && rendered.buffer) {
+        if (rendered && rendered.pages && rendered.pages.length > 0) {
           mimeType = rendered.mimeType;
-          outputFileName = `${cleanName}_converted.${rendered.ext}`;
-          outputBase64 = Buffer.from(rendered.buffer).toString('base64');
+          outputFileName = `${cleanName}_halaman_1.${rendered.ext}`;
+          outputBase64 = rendered.primaryBase64;
+          return res.status(200).json({
+            success: true,
+            fileName: outputFileName,
+            fileBase64: outputBase64,
+            mimeType,
+            targetFormat,
+            size: Buffer.from(outputBase64, 'base64').length,
+            numPages: rendered.numPages,
+            pages: rendered.pages.map((p) => ({
+              pageNumber: p.pageNumber,
+              fileName: `${cleanName}_halaman_${p.pageNumber}.${rendered.ext}`,
+              fileBase64: p.base64,
+              width: p.width,
+              height: p.height
+            }))
+          });
         } else {
           mimeType = targetFormat === 'PNG' ? 'image/png' : 'image/jpeg';
           outputFileName = `${cleanName}_converted.${targetFormat.toLowerCase()}`;

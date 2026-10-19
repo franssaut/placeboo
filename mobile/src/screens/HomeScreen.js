@@ -28,6 +28,7 @@ export default function HomeScreen({ mode = 'pdf_to_image', onModeChange }) {
   const [isConverting, setIsConverting] = useState(false);
   const [progress, setProgress] = useState(0);
   const [convertedResult, setConvertedResult] = useState(null);
+  const [activePdfPageIdx, setActivePdfPageIdx] = useState(0);
 
   // Sync mode from parent if provided
   useEffect(() => {
@@ -40,6 +41,7 @@ export default function HomeScreen({ mode = 'pdf_to_image', onModeChange }) {
     setActiveMode(newMode);
     setConvertedResult(null);
     setProgress(0);
+    setActivePdfPageIdx(0);
     if (newMode === 'pdf_to_image') {
       setTargetFormat('PNG');
     } else {
@@ -215,18 +217,25 @@ export default function HomeScreen({ mode = 'pdf_to_image', onModeChange }) {
   };
 
   const handleShare = async () => {
-    if (convertedResult && convertedResult.uri) {
-      const mime =
-        convertedResult.mimeType ||
-        (targetFormat === 'PNG'
-          ? 'image/png'
-          : targetFormat === 'JPG' || targetFormat === 'JPEG'
-          ? 'image/jpeg'
-          : 'application/pdf');
+    if (convertedResult) {
+      const activeFileUri =
+        isPdfToImage && convertedResult.pages && convertedResult.pages[activePdfPageIdx]
+          ? convertedResult.pages[activePdfPageIdx].uri
+          : convertedResult.uri;
 
-      const success = await shareFileNative(convertedResult.uri, mime);
-      if (!success) {
-        Alert.alert('Informasi', 'Fitur penyimpanan berkas telah dibuka di sistem perangkat Anda.');
+      if (activeFileUri) {
+        const mime =
+          convertedResult.mimeType ||
+          (targetFormat === 'PNG'
+            ? 'image/png'
+            : targetFormat === 'JPG' || targetFormat === 'JPEG'
+            ? 'image/jpeg'
+            : 'application/pdf');
+
+        const success = await shareFileNative(activeFileUri, mime);
+        if (!success) {
+          Alert.alert('Informasi', 'Fitur penyimpanan berkas telah dibuka di sistem perangkat Anda.');
+        }
       }
     }
   };
@@ -236,6 +245,7 @@ export default function HomeScreen({ mode = 'pdf_to_image', onModeChange }) {
     setSelectedImages([]);
     setConvertedResult(null);
     setProgress(0);
+    setActivePdfPageIdx(0);
   };
 
   return (
@@ -484,22 +494,104 @@ export default function HomeScreen({ mode = 'pdf_to_image', onModeChange }) {
               <View style={styles.successTextCol}>
                 <Text style={styles.successTitle}>Konversi Berhasil!</Text>
                 <Text style={styles.successFileName} numberOfLines={1}>
-                  {convertedResult.fileName}
+                  {isPdfToImage && convertedResult.pages && convertedResult.pages[activePdfPageIdx]
+                    ? convertedResult.pages[activePdfPageIdx].fileName
+                    : convertedResult.fileName}
                 </Text>
                 {!isPdfToImage && (
                   <Text style={styles.successPageCountText}>
                     Dokumen berisi {convertedResult.pageCount || selectedImages.length} halaman gambar.
                   </Text>
                 )}
+                {isPdfToImage && convertedResult.pages && convertedResult.pages.length > 1 && (
+                  <Text style={styles.successPageCountText}>
+                    Dokumen PDF berhasil dirender ({convertedResult.pages.length} halaman).
+                  </Text>
+                )}
               </View>
             </View>
 
             {/* Live Image Preview for PDF to Image */}
-            {isPdfToImage && Boolean(convertedResult.uri) && (
+            {isPdfToImage && (
               <View style={styles.previewImageContainer}>
-                <Text style={styles.previewLabel}>Pratinjau Hasil Dokumen Gambar:</Text>
+                <View style={styles.previewHeaderRow}>
+                  <Text style={styles.previewLabel}>Pratinjau Hasil Dokumen Gambar:</Text>
+                  {convertedResult.pages && convertedResult.pages.length > 1 && (
+                    <View style={styles.previewCounterBadge}>
+                      <Text style={styles.previewCounterBadgeText}>
+                        Hal {activePdfPageIdx + 1} / {convertedResult.pages.length}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+
+                {convertedResult.pages && convertedResult.pages.length > 1 && (
+                  <View style={styles.pageSelectorRow}>
+                    <TouchableOpacity
+                      style={[styles.pageNavBtn, activePdfPageIdx === 0 && styles.pageNavBtnDisabled]}
+                      disabled={activePdfPageIdx === 0}
+                      onPress={() => setActivePdfPageIdx((prev) => Math.max(0, prev - 1))}
+                    >
+                      <MaterialIcons
+                        name="chevron-left"
+                        size={20}
+                        color={activePdfPageIdx === 0 ? '#94a3b8' : '#4f46e5'}
+                      />
+                      <Text
+                        style={[
+                          styles.pageNavBtnText,
+                          activePdfPageIdx === 0 && styles.pageNavBtnTextDisabled
+                        ]}
+                      >
+                        Sebelumnya
+                      </Text>
+                    </TouchableOpacity>
+
+                    <Text style={styles.pageIndicatorText}>
+                      Halaman {activePdfPageIdx + 1} dari {convertedResult.pages.length}
+                    </Text>
+
+                    <TouchableOpacity
+                      style={[
+                        styles.pageNavBtn,
+                        activePdfPageIdx >= convertedResult.pages.length - 1 && styles.pageNavBtnDisabled
+                      ]}
+                      disabled={activePdfPageIdx >= convertedResult.pages.length - 1}
+                      onPress={() =>
+                        setActivePdfPageIdx((prev) =>
+                          Math.min(convertedResult.pages.length - 1, prev + 1)
+                        )
+                      }
+                    >
+                      <Text
+                        style={[
+                          styles.pageNavBtnText,
+                          activePdfPageIdx >= convertedResult.pages.length - 1 &&
+                            styles.pageNavBtnTextDisabled
+                        ]}
+                      >
+                        Berikutnya
+                      </Text>
+                      <MaterialIcons
+                        name="chevron-right"
+                        size={20}
+                        color={
+                          activePdfPageIdx >= convertedResult.pages.length - 1
+                            ? '#94a3b8'
+                            : '#4f46e5'
+                        }
+                      />
+                    </TouchableOpacity>
+                  </View>
+                )}
+
                 <Image
-                  source={{ uri: convertedResult.uri }}
+                  source={{
+                    uri:
+                      convertedResult.pages && convertedResult.pages[activePdfPageIdx]
+                        ? convertedResult.pages[activePdfPageIdx].uri
+                        : convertedResult.uri
+                  }}
                   style={styles.previewImage}
                   resizeMode="contain"
                 />
@@ -509,7 +601,11 @@ export default function HomeScreen({ mode = 'pdf_to_image', onModeChange }) {
             <View style={styles.successActionRow}>
               <TouchableOpacity style={styles.btnShare} onPress={handleShare}>
                 <MaterialIcons name="share" size={18} color="#ffffff" />
-                <Text style={styles.btnShareText}>Buka / Bagikan Berkas</Text>
+                <Text style={styles.btnShareText}>
+                  {isPdfToImage && convertedResult.pages && convertedResult.pages.length > 1
+                    ? `Buka Halaman ${activePdfPageIdx + 1}`
+                    : 'Buka / Bagikan Berkas'}
+                </Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.btnResetSmall} onPress={handleReset}>
                 <MaterialIcons name="refresh" size={18} color="#475569" />
@@ -1034,17 +1130,71 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#a7f3d0'
   },
+  previewHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8
+  },
   previewLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#065f46'
+  },
+  previewCounterBadge: {
+    backgroundColor: '#ecfdf5',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#a7f3d0'
+  },
+  previewCounterBadgeText: {
     fontSize: 11,
     fontWeight: '700',
-    color: '#065f46',
-    marginBottom: 6
+    color: '#047857'
+  },
+  pageSelectorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#f8fafc',
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#e2e8f0'
+  },
+  pageNavBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    paddingVertical: 4,
+    paddingHorizontal: 6,
+    borderRadius: 6
+  },
+  pageNavBtnDisabled: {
+    opacity: 0.4
+  },
+  pageNavBtnText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#4f46e5'
+  },
+  pageNavBtnTextDisabled: {
+    color: '#94a3b8'
+  },
+  pageIndicatorText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#334155'
   },
   previewImage: {
     width: '100%',
-    height: 280,
+    height: 320,
     borderRadius: 8,
-    backgroundColor: '#ffffff'
+    backgroundColor: '#f8fafc'
   },
   successActionRow: {
     flexDirection: 'row',

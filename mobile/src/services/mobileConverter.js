@@ -307,6 +307,23 @@ export async function convertDocumentMobile(filesInput, targetFormat = 'XLSX', o
             const actualFileName = data.fileName || outputFileName;
             const actualOutputUri = `${baseDir}${actualFileName}`;
             await writeBase64File(actualOutputUri, data.fileBase64);
+
+            const savedPages = [];
+            if (data.pages && Array.isArray(data.pages)) {
+              for (const p of data.pages) {
+                const pName = p.fileName || `${cleanName}_halaman_${p.pageNumber}.${targetExt}`;
+                const pUri = `${baseDir}${pName}`;
+                await writeBase64File(pUri, p.fileBase64);
+                savedPages.push({
+                  pageNumber: p.pageNumber,
+                  fileName: pName,
+                  uri: pUri,
+                  width: p.width,
+                  height: p.height
+                });
+              }
+            }
+
             console.log(`[API Conversion Success via ${endpoint}]`);
             onProgress(100);
             return {
@@ -315,7 +332,9 @@ export async function convertDocumentMobile(filesInput, targetFormat = 'XLSX', o
               targetFormat: data.targetFormat || targetFormat.toUpperCase(),
               mimeType: data.mimeType || (targetFormat.toUpperCase() === 'PNG' ? 'image/png' : targetFormat.toUpperCase() === 'PDF' ? 'application/pdf' : 'image/jpeg'),
               sourceEngine: 'Website Cloud API',
-              pageCount: isMulti ? imagesPayload.length : 1
+              pageCount: isMulti ? imagesPayload.length : (data.numPages || 1),
+              numPages: data.numPages || (savedPages.length > 0 ? savedPages.length : 1),
+              pages: savedPages.length > 0 ? savedPages : [{ pageNumber: 1, fileName: actualFileName, uri: actualOutputUri }]
             };
           }
         }
