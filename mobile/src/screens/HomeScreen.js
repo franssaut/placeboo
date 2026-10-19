@@ -99,9 +99,13 @@ export default function HomeScreen({ defaultFormat = 'XLSX' }) {
       });
 
       setConvertedResult(result);
-      Alert.alert('Konversi Berhasil', `Berkas berhasil dikonversi ke format ${targetFormat}!`);
+      Alert.alert('Konversi Berhasil', `Berkas berhasil dikonversi ke format ${targetFormat} (${result.sourceEngine || 'Placeboo API'})!`);
     } catch (err) {
-      Alert.alert('Konversi Gagal', 'Terjadi kesalahan saat memproses konversi dokumen.');
+      console.error('Convert document error:', err);
+      Alert.alert(
+        'Konversi Gagal',
+        `Terjadi kesalahan saat memproses konversi: ${err?.message || 'Gagal memproses dokumen.'}`
+      );
     } finally {
       setIsConverting(false);
     }
