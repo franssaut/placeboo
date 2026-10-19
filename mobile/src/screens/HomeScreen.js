@@ -240,6 +240,20 @@ export default function HomeScreen({ mode = 'pdf_to_image', onModeChange }) {
     }
   };
 
+  const handleShareAllPagesImage = async () => {
+    if (convertedResult?.stitchedUri) {
+      const mime =
+        convertedResult.mimeType ||
+        (targetFormat === 'JPG' || targetFormat === 'JPEG' ? 'image/jpeg' : 'image/png');
+      const success = await shareFileNative(convertedResult.stitchedUri, mime);
+      if (!success) {
+        Alert.alert('Informasi', 'Fitur penyimpanan berkas telah dibuka di perangkat Anda.');
+      }
+    } else {
+      await handleSharePage(0);
+    }
+  };
+
   const handleShare = async () => {
     await handleSharePage(activePdfPageIdx);
   };
@@ -604,29 +618,41 @@ export default function HomeScreen({ mode = 'pdf_to_image', onModeChange }) {
 
             {isPdfToImage && convertedResult.pages && convertedResult.pages.length > 1 ? (
               <View style={styles.multiShareContainer}>
-                {/* 1. Primary Share Action: Bagikan Gambar Halaman yang sedang aktif */}
+                {/* 1. Tombol Utama: Bagikan ke Semua Isi Halaman PDF */}
+                <TouchableOpacity
+                  style={styles.btnShareAllPages}
+                  onPress={handleShareAllPagesImage}
+                  activeOpacity={0.8}
+                >
+                  <MaterialIcons name="photo-library" size={22} color="#ffffff" />
+                  <View style={styles.btnShareAllPagesContent}>
+                    <Text style={styles.btnShareAllPagesTitle}>
+                      Bagikan ke Semua Isi Halaman PDF
+                    </Text>
+                    <Text style={styles.btnShareAllPagesSub}>
+                      Kirim seluruh {convertedResult.pages.length} halaman PDF sekaligus dalam 1 gambar dokumen utuh (tanpa ZIP)
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+
+                {/* 2. Tombol Bagikan Halaman yang Sedang Aktif di Preview */}
                 <TouchableOpacity
                   style={styles.btnSharePrimaryPage}
                   onPress={() => handleSharePage(activePdfPageIdx)}
                   activeOpacity={0.8}
                 >
-                  <MaterialIcons name="share" size={20} color="#ffffff" />
-                  <View style={styles.btnSharePrimaryPageContent}>
-                    <Text style={styles.btnSharePrimaryPageTitle}>
-                      Bagikan Gambar Halaman {activePdfPageIdx + 1}
-                    </Text>
-                    <Text style={styles.btnSharePrimaryPageSub}>
-                      Kirim gambar halaman {activePdfPageIdx + 1} sesuai isi dokumen PDF ke WhatsApp / Aplikasi lain
-                    </Text>
-                  </View>
+                  <MaterialIcons name="share" size={18} color="#059669" />
+                  <Text style={styles.btnSharePrimaryPageText}>
+                    Bagikan Halaman {activePdfPageIdx + 1} Saja (Hal. {activePdfPageIdx + 1} dari {convertedResult.pages.length})
+                  </Text>
                 </TouchableOpacity>
 
-                {/* 2. Daftar Semua Lembar Halaman PDF */}
+                {/* 3. Daftar Semua Lembar Halaman PDF */}
                 <View style={styles.pagesListSection}>
                   <View style={styles.pagesListHeader}>
-                    <MaterialIcons name="photo-library" size={16} color="#4f46e5" />
+                    <MaterialIcons name="auto-awesome-motion" size={16} color="#4f46e5" />
                     <Text style={styles.pagesListTitle}>
-                      Semua Halaman PDF ({convertedResult.pages.length} Lembar Gambar)
+                      Pilih Halaman Tertentu ({convertedResult.pages.length} Halaman)
                     </Text>
                   </View>
                   <Text style={styles.pagesListSub}>
@@ -1310,13 +1336,13 @@ const styles = StyleSheet.create({
     gap: 12,
     marginTop: 8
   },
-  btnSharePrimaryPage: {
+  btnShareAllPages: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
     backgroundColor: '#059669',
-    paddingVertical: 12,
-    paddingHorizontal: 14,
+    paddingVertical: 13,
+    paddingHorizontal: 15,
     borderRadius: 10,
     shadowColor: '#059669',
     shadowOffset: { width: 0, height: 2 },
@@ -1324,18 +1350,35 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 3
   },
-  btnSharePrimaryPageContent: {
+  btnShareAllPagesContent: {
     flex: 1
   },
-  btnSharePrimaryPageTitle: {
+  btnShareAllPagesTitle: {
     color: '#ffffff',
     fontSize: 14,
     fontWeight: '700'
   },
-  btnSharePrimaryPageSub: {
+  btnShareAllPagesSub: {
     color: '#d1fae5',
     fontSize: 10,
     marginTop: 2
+  },
+  btnSharePrimaryPage: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#ecfdf5',
+    borderWidth: 1.5,
+    borderColor: '#a7f3d0',
+    paddingVertical: 11,
+    paddingHorizontal: 14,
+    borderRadius: 10
+  },
+  btnSharePrimaryPageText: {
+    color: '#047857',
+    fontSize: 13,
+    fontWeight: '700'
   },
   pagesListSection: {
     backgroundColor: '#f8fafc',

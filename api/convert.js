@@ -129,11 +129,54 @@ async function renderPdfToImage(pdfBuffer, targetFormat = 'PNG') {
       });
     }
 
+    let stitchedBase64 = null;
+
+    if (numPages > 1) {
+      try {
+        let totalHeight = 0;
+        let maxWidth = 0;
+        const gap = 20;
+        for (const p of pages) {
+          maxWidth = Math.max(maxWidth, p.width);
+          totalHeight += p.height + gap;
+        }
+        totalHeight = Math.max(totalHeight - gap, 100);
+
+        if (totalHeight <= 32767) {
+          const { loadImage } = await import('@napi-rs/canvas');
+          const stitchedCanvas = createCanvas(maxWidth, totalHeight);
+          const sCtx = stitchedCanvas.getContext('2d');
+          sCtx.fillStyle = '#ffffff';
+          sCtx.fillRect(0, 0, maxWidth, totalHeight);
+
+          let curY = 0;
+          for (let i = 0; i < pages.length; i++) {
+            const p = pages[i];
+            const img = await loadImage(p.buffer);
+            const offsetX = Math.floor((maxWidth - p.width) / 2);
+            sCtx.drawImage(img, offsetX, curY);
+            curY += p.height;
+            if (i < pages.length - 1) {
+              sCtx.fillStyle = '#e2e8f0';
+              sCtx.fillRect(0, curY, maxWidth, gap);
+              curY += gap;
+            }
+          }
+
+          const stitchedBuf = await stitchedCanvas.encode(encodeFormat, isJpg ? 90 : undefined);
+          stitchedBase64 = Buffer.from(stitchedBuf).toString('base64');
+        }
+      } catch (stitchErr) {
+        console.warn('[Stitch packaging warning]:', stitchErr?.message);
+      }
+    }
+
     return {
       numPages,
       pages,
       primaryBuffer: pages[0].buffer,
       primaryBase64: pages[0].base64,
+      stitchedBase64,
       mimeType,
       ext
     };
@@ -580,6 +623,8 @@ export default async function handler(req, res) {
             targetFormat,
             size: Buffer.from(outputBase64, 'base64').length,
             numPages: rendered.numPages,
+            stitchedFileName: rendered.stitchedBase64 ? `${cleanName}_semua_isi_halaman.${rendered.ext}` : null,
+            stitchedBase64: rendered.stitchedBase64,
             pages: rendered.pages.map((p) => ({
               pageNumber: p.pageNumber,
               fileName: `${cleanName}_halaman_${p.pageNumber}.${rendered.ext}`,

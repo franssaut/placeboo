@@ -324,11 +324,19 @@ export async function convertDocumentMobile(filesInput, targetFormat = 'XLSX', o
               }
             }
 
+            let stitchedUri = null;
+            if (data.stitchedBase64 && data.stitchedFileName) {
+              stitchedUri = `${baseDir}${data.stitchedFileName}`;
+              await writeBase64File(stitchedUri, data.stitchedBase64);
+            }
+
             console.log(`[API Conversion Success via ${endpoint}]`);
             onProgress(100);
             return {
               fileName: actualFileName,
               uri: actualOutputUri,
+              stitchedUri,
+              stitchedFileName: data.stitchedFileName,
               targetFormat: data.targetFormat || targetFormat.toUpperCase(),
               mimeType: data.mimeType || (targetFormat.toUpperCase() === 'PNG' ? 'image/png' : targetFormat.toUpperCase() === 'PDF' ? 'application/pdf' : 'image/jpeg'),
               sourceEngine: 'Website Cloud API',
