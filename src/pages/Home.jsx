@@ -21,6 +21,10 @@ export default function Home() {
     if (fmt) {
       setTargetFormat(fmt.toUpperCase());
     }
+    const tool = searchParams.get('tool');
+    if (tool === 'merge-pdf' || tool === 'batch') {
+      setIsBatchMode(true);
+    }
   }, [searchParams]);
 
   const handleFileSelect = (e) => {
@@ -105,6 +109,9 @@ export default function Home() {
       source_format: 'DOCX',
       target_format: targetFormat
     };
+    if (filesToProcess[0]) {
+      currentJob.rawFile = filesToProcess[0];
+    }
 
     // Animate progress smoothly
     let p = 20;

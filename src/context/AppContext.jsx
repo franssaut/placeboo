@@ -10,8 +10,12 @@ import {
   supabase
 } from '../services/supabase';
 import { generateConvertedBlob } from '../services/fileGenerator';
+import { performRealConversion } from '../services/realConverter';
 
 const AppContext = createContext();
+
+// In-memory cache for user's actual uploaded File / Blob objects
+const rawFileCache = new Map();
 
 // Helper to guarantee consistent object shape across all screens
 export const normalizeJob = (raw, defaultSessionId = 'DM-DEFAULT') => {
@@ -188,15 +192,16 @@ export const AppProvider = ({ children }) => {
 
   /**
    * Universal trigger download handler:
-   * Accepts either:
-   *  - a string filename (e.g. 'Hasil.pdf' or 'Placeboo_Batch.zip')
-   *  - a full job object (e.g. item from conversions)
+   * Performs REAL client-side conversion on uploaded user files (jsPDF, pdf-lib, canvas)
+   * or falls back to valid compliant document templates.
    */
-  const triggerDownload = (target, customContent = null) => {
+  const triggerDownload = async (target) => {
     try {
       let filename = 'Dokumen_Konversi.pdf';
       let sourceFormat = 'DOCX';
       let targetFormat = 'PDF';
+      let jobId = null;
+      let rawFile = null;
 
       if (typeof target === 'string') {
         filename = target;
@@ -205,16 +210,34 @@ export const AppProvider = ({ children }) => {
           targetFormat = parts.pop().toUpperCase();
         }
       } else if (target && typeof target === 'object') {
+        jobId = target.id;
+        rawFile = target.rawFile || (jobId ? rawFileCache.get(jobId) : null);
         const baseName = target.filename || target.file_name || target.name || 'Dokumen_Konversi';
         sourceFormat = (target.source_format || 'DOCX').toUpperCase();
         targetFormat = (target.target_format || 'PDF').toUpperCase();
         filename = baseName.replace(/\.[^/.]+$/, '') + '.' + targetFormat.toLowerCase();
       }
 
-      // Generate genuine, valid Blob
-      const blob = generateConvertedBlob(filename, sourceFormat, targetFormat);
-      const blobUrl = URL.createObjectURL(blob);
+      showToast(`Sedang menyiapkan unduhan "${filename}"...`, 'info');
 
+      // REAL CONVERSION PIPELINE:
+      let blob = null;
+      if (rawFile) {
+        try {
+          blob = await performRealConversion(rawFile, targetFormat);
+        } catch (convErr) {
+          console.warn('[Real conversion fallback]:', convErr);
+          blob = generateConvertedBlob(filename, sourceFormat, targetFormat);
+        }
+      } else {
+        blob = generateConvertedBlob(filename, sourceFormat, targetFormat);
+      }
+
+      if (!blob) {
+        blob = generateConvertedBlob(filename, sourceFormat, targetFormat);
+      }
+
+      const blobUrl = URL.createObjectURL(blob);
       const downloadAnchor = document.createElement('a');
       downloadAnchor.href = blobUrl;
       downloadAnchor.download = filename;
@@ -227,9 +250,9 @@ export const AppProvider = ({ children }) => {
           document.body.removeChild(downloadAnchor);
           URL.revokeObjectURL(blobUrl);
         } catch (e) {}
-      }, 500);
+      }, 1000);
 
-      showToast(`Mengunduh berkas "${filename}"...`, 'success');
+      showToast(`Berhasil mengunduh "${filename}"!`, 'success');
     } catch (err) {
       console.error('[triggerDownload Error]:', err);
       showToast('Gagal memproses unduhan berkas.', 'error');
@@ -238,7 +261,7 @@ export const AppProvider = ({ children }) => {
 
   /**
    * Add jobs to the conversion queue:
-   * Safely handles File objects from input or plain objects from batch simulator
+   * Caches raw File instances for real client-side conversion
    */
   const addJobs = async (files, defaultTargetFormat = 'PDF') => {
     if (!files || !Array.isArray(files) || files.length === 0) return [];
@@ -261,6 +284,13 @@ export const AppProvider = ({ children }) => {
         ? crypto.randomUUID()
         : '00000000-0000-4000-8000-' + Math.random().toString(16).substring(2, 14).padEnd(12, '0');
 
+      // Cache raw file for real conversion
+      if (file instanceof Blob || file instanceof File) {
+        rawFileCache.set(uuid, file);
+      } else if (file.rawFile) {
+        rawFileCache.set(uuid, file.rawFile);
+      }
+
       const job = normalizeJob({
         id: uuid,
         session_id: sessionId,
@@ -276,6 +306,11 @@ export const AppProvider = ({ children }) => {
         expires_at: new Date(Date.now() + 2 * 3600 * 1000).toISOString()
       }, sessionId);
 
+      // Attach in-memory rawFile reference
+      if (file instanceof Blob || file instanceof File) {
+        job.rawFile = file;
+      }
+
       if (supabaseStatus === 'connected') {
         try {
           const cloudItem = await insertJob({
@@ -289,7 +324,9 @@ export const AppProvider = ({ children }) => {
             status: job.status,
             progress: job.progress
           });
-          newItems.push(cloudItem ? normalizeJob(cloudItem, sessionId) : job);
+          const normalized = cloudItem ? normalizeJob(cloudItem, sessionId) : job;
+          normalized.rawFile = job.rawFile;
+          newItems.push(normalized);
         } catch (e) {
           newItems.push(job);
         }
@@ -323,6 +360,7 @@ export const AppProvider = ({ children }) => {
   };
 
   const deleteJob = async (id) => {
+    rawFileCache.delete(id);
     setConversions(prev => prev.filter(item => item.id !== id));
     if (supabaseStatus === 'connected') {
       try {
@@ -333,6 +371,7 @@ export const AppProvider = ({ children }) => {
   };
 
   const purgeAll = async () => {
+    rawFileCache.clear();
     setConversions([]);
     if (supabaseStatus === 'connected') {
       try {
