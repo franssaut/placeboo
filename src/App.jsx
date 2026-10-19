@@ -6,8 +6,6 @@ import ProModal from './components/ProModal';
 import Toast from './components/Toast';
 import Home from './pages/Home';
 import Catalog from './pages/Catalog';
-import BatchQueue from './pages/BatchQueue';
-import DownloadHistory from './pages/DownloadHistory';
 
 export default function App() {
   return (
@@ -17,8 +15,6 @@ export default function App() {
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/semua-alat" element={<Catalog />} />
-          <Route path="/batch-queue" element={<BatchQueue />} />
-          <Route path="/riwayat-unduhan" element={<DownloadHistory />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </div>

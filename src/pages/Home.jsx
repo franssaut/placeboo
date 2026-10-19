@@ -1,14 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useNavigate, useSearchParams, Link } from 'react-router-dom';
+import { useSearchParams, Link } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 
 export default function Home() {
   const { addJobs, formatBytes, showToast, triggerDownload, convertAndCacheBlob } = useApp();
   const [searchParams] = useSearchParams();
-  const navigate = useNavigate();
   const fileInputRef = useRef(null);
 
-  const [isBatchMode, setIsBatchMode] = useState(false);
   const [targetFormat, setTargetFormat] = useState('DOCX');
   const [selectedFiles, setSelectedFiles] = useState([]);
   const [isDragging, setIsDragging] = useState(false);
@@ -20,10 +18,6 @@ export default function Home() {
     const fmt = searchParams.get('format') || searchParams.get('target');
     if (fmt) {
       setTargetFormat(fmt.toUpperCase());
-    }
-    const tool = searchParams.get('tool');
-    if (tool === 'merge-pdf' || tool === 'batch') {
-      setIsBatchMode(true);
     }
   }, [searchParams]);
 
@@ -58,19 +52,7 @@ export default function Home() {
       setTargetFormat('PDF');
     }
 
-    if (!isBatchMode) {
-      setSelectedFiles([files[0]]);
-    } else {
-      setSelectedFiles((prev) => {
-        const combined = [...prev];
-        files.forEach((f) => {
-          if (!combined.some((exist) => exist.name === f.name)) {
-            combined.push(f);
-          }
-        });
-        return combined;
-      });
-    }
+    setSelectedFiles([files[0]]);
   };
 
   const handleDrop = (e) => {
@@ -101,19 +83,7 @@ export default function Home() {
       setTargetFormat('PDF');
     }
 
-    if (!isBatchMode) {
-      setSelectedFiles([files[0]]);
-    } else {
-      setSelectedFiles((prev) => {
-        const combined = [...prev];
-        files.forEach((f) => {
-          if (!combined.some((exist) => exist.name === f.name)) {
-            combined.push(f);
-          }
-        });
-        return combined;
-      });
-    }
+    setSelectedFiles([files[0]]);
   };
 
   const removeFile = (index) => {
@@ -132,13 +102,7 @@ export default function Home() {
       return;
     }
 
-    if (isBatchMode && filesToProcess.length > 1) {
-      await addJobs(filesToProcess, targetFormat);
-      navigate('/batch-queue');
-      return;
-    }
-
-    // Single mode: run REAL conversion immediately
+    // Run REAL conversion immediately
     setIsConvertingHome(true);
     setHomeProgress(10);
 
@@ -231,35 +195,13 @@ export default function Home() {
               <div className="bg-surface-container-lowest rounded-xl shadow-xl overflow-hidden border border-outline-variant/15">
                 {/* Controller Top Bar */}
                 <div className="bg-surface-container-low px-space-lg py-space-sm flex flex-wrap items-center justify-between gap-space-md">
-                  <div className="flex items-center gap-1 bg-surface-container p-1 rounded-lg">
-                    <button
-                      onClick={() => {
-                        setIsBatchMode(false);
-                        if (selectedFiles.length > 1) setSelectedFiles([selectedFiles[0]]);
-                      }}
-                      className={`px-3 py-1.5 rounded font-label-sm text-label-sm transition-all flex items-center gap-1.5 ${
-                        !isBatchMode
-                          ? 'bg-surface-container-lowest text-primary shadow-sm font-semibold'
-                          : 'text-on-surface-variant hover:text-on-surface'
-                      }`}
-                    >
-                      <span className="material-symbols-outlined text-[16px]">description</span>
-                      Unggah Satuan
-                    </button>
-                    <button
-                      onClick={() => setIsBatchMode(true)}
-                      className={`px-3 py-1.5 rounded font-label-sm text-label-sm transition-all flex items-center gap-1.5 ${
-                        isBatchMode
-                          ? 'bg-surface-container-lowest text-primary shadow-sm font-semibold'
-                          : 'text-on-surface-variant hover:text-on-surface'
-                      }`}
-                    >
-                      <span className="material-symbols-outlined text-[16px]">folder_copy</span>
-                      Batch Multi-Berkas
-                      <span className="px-1.5 py-0.2 rounded bg-primary-fixed text-primary font-code-mono text-[10px] font-bold">
-                        PRO
-                      </span>
-                    </button>
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-lg bg-primary-container text-on-primary flex items-center justify-center shadow-sm">
+                      <span className="material-symbols-outlined text-[18px]">auto_fix_high</span>
+                    </div>
+                    <span className="font-label-md text-label-md font-semibold text-on-surface">
+                      Konversi Dokumen Instan
+                    </span>
                   </div>
 
                   <div className="flex items-center gap-2">
@@ -325,7 +267,7 @@ export default function Home() {
                     <input
                       type="file"
                       ref={fileInputRef}
-                      multiple={isBatchMode}
+                      multiple={false}
                       onChange={handleFileSelect}
                       className="hidden"
                     />
@@ -458,18 +400,10 @@ export default function Home() {
                             <button
                               type="button"
                               onClick={() => handleQuickDownload(lastConvertedJob)}
-                              className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-lg bg-primary-container text-on-primary hover:bg-primary font-label-md shadow-md transition-all active:scale-95"
+                              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-2.5 rounded-lg bg-primary-container text-on-primary hover:bg-primary font-label-md shadow-md transition-all active:scale-95"
                             >
                               <span className="material-symbols-outlined text-[18px]">download</span>
                               Unduh Berkas Sekarang
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => navigate('/riwayat-unduhan')}
-                              className="inline-flex items-center justify-center px-3 py-2.5 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface font-label-md transition-colors"
-                              title="Lihat Riwayat & Pratinjau"
-                            >
-                              <span className="material-symbols-outlined text-[18px]">preview</span>
                             </button>
                           </div>
                         </div>
@@ -594,9 +528,6 @@ export default function Home() {
                 key={idx}
                 onClick={() => {
                   setTargetFormat(tool.format);
-                  if (tool.tag.includes('MULTI-PAGE')) {
-                    setIsBatchMode(true);
-                  }
                   window.scrollTo({ top: 120, behavior: 'smooth' });
                   fileInputRef.current?.click();
                   showToast(`Alat "${tool.title}" aktif. Pilih berkas untuk dikonversi.`, 'info');

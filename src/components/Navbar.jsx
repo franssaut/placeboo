@@ -69,18 +69,12 @@ export default function Navbar() {
             </span>
           </NavLink>
 
-          <nav className="hidden xl:flex items-center gap-space-xs">
-            <NavLink to="/semua-alat" className={navItemClass}>
-              Semua Alat
-            </NavLink>
+          <nav className="hidden sm:flex items-center gap-space-xs">
             <NavLink to="/" end className={navItemClass}>
-              Konversi PDF
+              Konversi Dokumen
             </NavLink>
-            <NavLink to="/batch-queue" className={navItemClass}>
-              Batch Queue
-            </NavLink>
-            <NavLink to="/riwayat-unduhan" className={navItemClass}>
-              Riwayat & Unduhan
+            <NavLink to="/semua-alat" className={navItemClass}>
+              Semua Alat (42+)
             </NavLink>
           </nav>
         </div>
@@ -110,32 +104,11 @@ export default function Navbar() {
             Peningkatan Pro
           </button>
 
-          <button
-            type="button"
-            aria-label="Notifikasi"
-            onClick={() => showToast('Tidak ada notifikasi baru.')}
-            className="w-9 h-9 rounded-lg flex items-center justify-center text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface transition-colors relative"
-          >
-            <span className="material-symbols-outlined text-[20px]">notifications</span>
-            <span className="absolute top-2 right-2 w-2 h-2 rounded-full bg-secondary"></span>
-          </button>
-
-          <div className="flex items-center gap-1.5 pl-space-xs cursor-pointer group">
-            <img
-              alt="Profile"
-              className="w-8 h-8 rounded-full object-cover shadow-[0_1px_3px_rgba(15,23,42,0.1)]"
-              src="https://lh3.googleusercontent.com/aida-public/AB6AXuCpIsj0zAHm7ZK6VXl5g1W2SynASvdIa7emKrSGGefHr9TFkkZaiEQS9sQBCSn0uHOpQXGTflab2MZjFYpLTk4lF8ldpmCIZU7yfPUGLwFuDHAm1k7bRYOMwb1OAIyx2Zgmhb3V7mCZmhm_O-WcYqyY4AnUzc5NLK6zU-EH_AA7qiDF3kMgDJOS6ieVE4-h2CDg8YWPjIwImIqrqesNuCjC9ApfjJmvQCZmV7xnkYossvQJ_Nj21I_G-g"
-            />
-            <span className="material-symbols-outlined text-[18px] text-on-surface-variant group-hover:text-on-surface transition-colors">
-              keyboard_arrow_down
-            </span>
-          </div>
-
           {/* Mobile hamburger button */}
           <button
             type="button"
             onClick={() => setMobileMenuOpen(true)}
-            className="xl:hidden w-9 h-9 rounded-lg flex items-center justify-center text-on-surface-variant hover:bg-surface-container-low transition-colors"
+            className="sm:hidden w-9 h-9 rounded-lg flex items-center justify-center text-on-surface-variant hover:bg-surface-container-low transition-colors"
           >
             <span className="material-symbols-outlined text-[24px]">menu</span>
           </button>
@@ -179,7 +152,7 @@ export default function Navbar() {
                   }
                 >
                   <span className="material-symbols-outlined text-[20px]">home</span>
-                  Konversi PDF / Dokumen
+                  Konversi Dokumen
                 </NavLink>
 
                 <NavLink
@@ -195,36 +168,6 @@ export default function Navbar() {
                 >
                   <span className="material-symbols-outlined text-[20px]">grid_view</span>
                   Semua Alat (42+)
-                </NavLink>
-
-                <NavLink
-                  to="/batch-queue"
-                  onClick={() => setMobileMenuOpen(false)}
-                  className={({ isActive }) =>
-                    `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium ${
-                      isActive
-                        ? 'bg-surface-container text-primary font-semibold'
-                        : 'text-on-surface-variant hover:bg-surface-container-low'
-                    }`
-                  }
-                >
-                  <span className="material-symbols-outlined text-[20px]">folder_copy</span>
-                  Batch Queue
-                </NavLink>
-
-                <NavLink
-                  to="/riwayat-unduhan"
-                  onClick={() => setMobileMenuOpen(false)}
-                  className={({ isActive }) =>
-                    `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium ${
-                      isActive
-                        ? 'bg-surface-container text-primary font-semibold'
-                        : 'text-on-surface-variant hover:bg-surface-container-low'
-                    }`
-                  }
-                >
-                  <span className="material-symbols-outlined text-[20px]">download_done</span>
-                  Riwayat & Unduhan
                 </NavLink>
               </nav>
             </div>
