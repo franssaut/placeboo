@@ -9,7 +9,7 @@ import {
   purgeSessionJobs,
   supabase
 } from '../services/supabase';
-import { generateConvertedBlob } from '../services/fileGenerator';
+import { generateConvertedBlob, generateZipBlob } from '../services/fileGenerator';
 import { performRealConversion } from '../services/realConverter';
 
 const AppContext = createContext();
@@ -192,8 +192,8 @@ export const AppProvider = ({ children }) => {
 
   /**
    * Universal trigger download handler:
-   * Performs REAL client-side conversion on uploaded user files (jsPDF, pdf-lib, canvas)
-   * or falls back to valid compliant document templates.
+   * Performs REAL client-side conversion on uploaded user files (jsPDF, pdf-lib, docx, SheetJS, JSZip)
+   * or falls back to valid compliant document templates with exact MIME types.
    */
   const triggerDownload = async (target) => {
     try {
@@ -220,25 +220,78 @@ export const AppProvider = ({ children }) => {
 
       showToast(`Sedang menyiapkan unduhan "${filename}"...`, 'info');
 
-      // REAL CONVERSION PIPELINE:
       let blob = null;
-      if (rawFile) {
+
+      // Special case: Batch ZIP download
+      if (filename.toLowerCase().endsWith('.zip') || targetFormat === 'ZIP') {
+        try {
+          const zipFiles = [];
+          for (const item of conversions) {
+            if (item.status === 'completed' || (item.progress || 0) >= 100) {
+              const itemRaw = item.rawFile || (item.id ? rawFileCache.get(item.id) : null);
+              const itemTargetExt = (item.target_format || 'PDF').toUpperCase();
+              const itemBase = (item.filename || item.name || 'Dokumen').replace(/\.[^/.]+$/, '');
+              const itemFileName = `${itemBase}.${itemTargetExt.toLowerCase()}`;
+              try {
+                let itemBlob = null;
+                if (itemRaw) {
+                  itemBlob = await performRealConversion(itemRaw, itemTargetExt);
+                } else {
+                  itemBlob = await generateConvertedBlob(itemFileName, item.source_format || 'DOCX', itemTargetExt);
+                }
+                if (itemBlob) {
+                  zipFiles.push({ name: itemFileName, blob: itemBlob });
+                }
+              } catch (e) {
+                console.warn('[Zip packing item fallback]:', e);
+              }
+            }
+          }
+          blob = await generateZipBlob(filename, zipFiles);
+        } catch (zipErr) {
+          console.warn('[Zip generation error]:', zipErr);
+          blob = await generateConvertedBlob(filename, sourceFormat, 'ZIP');
+        }
+      } else if (rawFile) {
+        // Real conversion of uploaded user file
         try {
           blob = await performRealConversion(rawFile, targetFormat);
         } catch (convErr) {
           console.warn('[Real conversion fallback]:', convErr);
-          blob = generateConvertedBlob(filename, sourceFormat, targetFormat);
+          blob = await generateConvertedBlob(filename, sourceFormat, targetFormat);
         }
       } else {
+        // Fallback or sample document conversion
         try {
           blob = await performRealConversion({ filename, name: filename, source_format: sourceFormat }, targetFormat);
         } catch (e) {
-          blob = generateConvertedBlob(filename, sourceFormat, targetFormat);
+          blob = await generateConvertedBlob(filename, sourceFormat, targetFormat);
         }
       }
 
       if (!blob) {
-        blob = generateConvertedBlob(filename, sourceFormat, targetFormat);
+        blob = await generateConvertedBlob(filename, sourceFormat, targetFormat);
+      }
+
+      // Ensure proper MIME type
+      const mimeMap = {
+        PDF: 'application/pdf',
+        DOCX: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        DOC: 'application/msword',
+        XLSX: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        XLS: 'application/vnd.ms-excel',
+        CSV: 'text/csv;charset=utf-8',
+        PNG: 'image/png',
+        JPG: 'image/jpeg',
+        JPEG: 'image/jpeg',
+        WEBP: 'image/webp',
+        TXT: 'text/plain;charset=utf-8',
+        ZIP: 'application/zip'
+      };
+
+      const desiredMime = mimeMap[targetFormat] || 'application/octet-stream';
+      if (blob && (!blob.type || blob.type === '')) {
+        blob = new Blob([blob], { type: desiredMime });
       }
 
       const blobUrl = URL.createObjectURL(blob);

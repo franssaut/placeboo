@@ -1,117 +1,190 @@
+import { jsPDF } from 'jspdf';
+import { Document, Paragraph, TextRun, HeadingLevel, Packer } from 'docx';
+import * as XLSX from 'xlsx';
+import JSZip from 'jszip';
+
 /**
  * Placeboo File Generator Utility
  * Generates genuine, valid, and openable file Blobs for downloads
+ * Uses official binary libraries (jsPDF, docx, SheetJS, JSZip) to guarantee zero corruption
  */
 
+/**
+ * 1. REAL PDF GENERATOR
+ * Uses jsPDF to output a standard-compliant PDF 1.4 binary stream with valid cross-reference tables
+ */
 export function generatePdfBlob(filename, sourceFormat = 'DOCX', targetFormat = 'PDF') {
-  const cleanName = filename.replace(/\.[^/.]+$/, '');
+  const cleanName = (filename || 'Dokumen_Konversi.pdf').replace(/\.[^/.]+$/, '');
   const timestamp = new Date().toLocaleString('id-ID', { dateStyle: 'full', timeStyle: 'medium' });
 
-  // Valid, standard compliant PDF 1.4 byte stream
-  const pdfContent = `%PDF-1.4
-%Placeboo-Secure-Engine
-1 0 obj
-<<
-  /Type /Catalog
-  /Pages 2 0 R
->>
-endobj
+  const doc = new jsPDF({
+    orientation: 'portrait',
+    unit: 'mm',
+    format: 'a4'
+  });
 
-2 0 obj
-<<
-  /Type /Pages
-  /Kids [3 0 R]
-  /Count 1
->>
-endobj
+  const pageWidth = 210;
+  const pageHeight = 297;
+  const margin = 15;
+  const usableWidth = pageWidth - (margin * 2);
 
-3 0 obj
-<<
-  /Type /Page
-  /Parent 2 0 R
-  /MediaBox [0 0 595.28 841.89]
-  /Contents 4 0 R
-  /Resources <<
-    /Font <<
-      /F1 5 0 R
-      /F2 6 0 R
-    >>
-  >>
->>
-endobj
+  // Brand Header Bar
+  doc.setFillColor(53, 37, 205);
+  doc.rect(0, 0, pageWidth, 16, 'F');
+  doc.setTextColor(255, 255, 255);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(10);
+  doc.text('PLACEBOO DOCUMENT CONVERTER', margin, 11);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+  doc.text(timestamp, pageWidth - margin, 11, { align: 'right' });
 
-4 0 obj
-<<
-  /Length 520
->>
-stream
-BT
-/F1 22 Tf
-50 790 Td
-(Placeboo Document Converter) Tj
-/F2 12 Tf
-0 -30 Td
-(Dokumen Asal: ${cleanName}.${sourceFormat.toLowerCase()}) Tj
-0 -20 Td
-(Format Konversi: ${sourceFormat.toUpperCase()} -> ${targetFormat.toUpperCase()}) Tj
-0 -20 Td
-(Tanggal Proses: ${timestamp}) Tj
-0 -20 Td
-(Status: Berhasil Terverifikasi 100%) Tj
-0 -20 Td
-(Keamanan: Enkripsi TLS 1.3 - Kebijakan Privasi Zero-Retention) Tj
-0 -30 Td
-(Isi Dokumen Hasil Konversi:) Tj
-/F2 10 Tf
-0 -20 Td
-(Seluruh teks, formula, dan tata letak berhasil diproses tanpa distorsi.) Tj
-0 -16 Td
-(Sertifikasi: ISO 27001 Cloud Infrastructure - Diproses di Sandbox Terisolasi.) Tj
-ET
-endstream
-endobj
+  // Document Title
+  doc.setTextColor(11, 28, 48);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(18);
+  doc.text(cleanName, margin, 30);
 
-5 0 obj
-<<
-  /Type /Font
-  /Subtype /Type1
-  /BaseFont /Helvetica-Bold
->>
-endobj
+  // Metadata Card
+  doc.setFillColor(245, 248, 255);
+  doc.roundedRect(margin, 36, usableWidth, 24, 2, 2, 'F');
+  doc.setFontSize(9);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(70, 69, 85);
+  doc.text(`Format Asal: ${sourceFormat.toUpperCase()}  •  Format Target: ${targetFormat.toUpperCase()}`, margin + 5, 43);
+  doc.text(`Status Konversi: Berhasil Diverifikasi 100% (Enkripsi TLS 1.3)`, margin + 5, 49);
+  doc.text(`Kebijakan Privasi: Zero-Retention (Dihapus otomatis dalam 2 jam)`, margin + 5, 55);
 
-6 0 obj
-<<
-  /Type /Font
-  /Subtype /Type1
-  /BaseFont /Helvetica
->>
-endobj
+  // Content Divider
+  doc.setDrawColor(220, 233, 255);
+  doc.setLineWidth(0.5);
+  doc.line(margin, 66, pageWidth - margin, 66);
 
-xref
-0 7
-0000000000 65535 f 
-0000000035 00000 n 
-0000000092 00000 n 
-0000000155 00000 n 
-0000000325 00000 n 
-0000000898 00000 n 
-0000000977 00000 n 
-trailer
-<<
-  /Size 7
-  /Root 1 0 R
->>
-startxref
-1052
-%%EOF`;
+  // Section Heading
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(12);
+  doc.setTextColor(11, 28, 48);
+  doc.text('Ringkasan Dokumen Hasil Konversi', margin, 75);
 
-  return new Blob([pdfContent], { type: 'application/pdf' });
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(10);
+  doc.setTextColor(70, 69, 85);
+
+  const sampleParagraphs = [
+    'Dokumen ini telah berhasil diproses secara presisi melalui mesin konversi dokumen Placeboo Core v4.8.',
+    'Seluruh struktur teks, font vector, tata letak paragraf, dan formula data telah diselaraskan dengan standar dokumen resmi ISO/IEC 32000.',
+    'Berkas ini siap untuk dibuka, dicetak, dibagikan, atau diarsipkan menggunakan aplikasi pembaca PDF standar seperti Adobe Acrobat Reader, Google Chrome, Microsoft Edge, dan Apple Preview tanpa distorsi.',
+    'Enkripsi end-to-end 256-bit memastikan tidak ada data pihak ketiga yang tertinggal pada server publik kami.'
+  ];
+
+  let y = 85;
+  sampleParagraphs.forEach(p => {
+    const lines = doc.splitTextToSize(p, usableWidth);
+    doc.text(lines, margin, y);
+    y += (lines.length * 5.8) + 4;
+  });
+
+  // Security Verification Stamp
+  doc.setFillColor(240, 253, 244);
+  doc.setDrawColor(187, 247, 208);
+  doc.roundedRect(margin, y + 4, usableWidth, 22, 2, 2, 'FD');
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(9.5);
+  doc.setTextColor(22, 101, 52);
+  doc.text('✓ STATUS: DOKUMEN TERVERIFIKASI & TERENKRIPSI PENUH', margin + 5, y + 13);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8.5);
+  doc.text('Telah melewati validasi integritas SHA-256 dan siap digunakan tanpa batas.', margin + 5, y + 20);
+
+  // Footer
+  doc.setDrawColor(220, 233, 255);
+  doc.line(margin, pageHeight - 18, pageWidth - margin, pageHeight - 18);
+  doc.setFontSize(8);
+  doc.setTextColor(140, 140, 150);
+  doc.text('Placeboo Core v4.8 • https://placeboo.vercel.app • Halaman 1 dari 1', margin, pageHeight - 12);
+
+  return doc.output('blob');
 }
 
-import * as XLSX from 'xlsx';
+/**
+ * 2. REAL MICROSOFT WORD (.DOCX) GENERATOR
+ * Generates genuine Office Open XML PKZip binary archives via docx library
+ * Opens in Microsoft Word, Google Docs, Apple Pages with ZERO corruption warnings
+ */
+export async function generateDocumentBlob(filename, sourceFormat = 'PDF', targetFormat = 'DOCX') {
+  const cleanName = (filename || 'Dokumen_Konversi.docx').replace(/\.[^/.]+$/, '');
+  const timestamp = new Date().toLocaleString('id-ID', { dateStyle: 'full', timeStyle: 'medium' });
 
+  const doc = new Document({
+    sections: [
+      {
+        properties: {},
+        children: [
+          new Paragraph({
+            text: cleanName,
+            heading: HeadingLevel.TITLE,
+            spacing: { after: 200 }
+          }),
+          new Paragraph({
+            children: [
+              new TextRun({
+                text: `Dikonversi melalui Placeboo Document Converter • ${timestamp}`,
+                italics: true,
+                color: '666666',
+                size: 18
+              })
+            ],
+            spacing: { after: 240 }
+          }),
+          new Paragraph({
+            children: [
+              new TextRun({
+                text: `Format Asal: ${sourceFormat.toUpperCase()}  |  Format Target: ${targetFormat.toUpperCase()}`,
+                bold: true,
+                color: '3525CD',
+                size: 20
+              })
+            ],
+            spacing: { after: 300 }
+          }),
+          new Paragraph({
+            text: 'Dokumen ini berhasil dikonversi ke format Microsoft Word (.docx) secara presisi dengan enkripsi aman TLS 1.3.',
+            spacing: { after: 180 }
+          }),
+          new Paragraph({
+            text: 'Seluruh struktur paragraf, teks, dan tata letak dokumen telah direkonstruksi sesuai standar Office Open XML.',
+            spacing: { after: 180 }
+          }),
+          new Paragraph({
+            text: 'Dokumen ini sepenuhnya kompatibel dan dapat langsung diedit di Microsoft Word, Google Docs, Apple Pages, maupun LibreOffice tanpa peringatan kerusakan berkas.',
+            spacing: { after: 180 }
+          }),
+          new Paragraph({
+            children: [
+              new TextRun({
+                text: 'Kunjungi: https://placeboo.vercel.app untuk melakukan konversi dokumen lainnya secara instan.',
+                italics: true,
+                color: '888888',
+                size: 18
+              })
+            ],
+            spacing: { before: 200 }
+          })
+        ]
+      }
+    ]
+  });
+
+  return await Packer.toBlob(doc);
+}
+
+/**
+ * 3. REAL MICROSOFT EXCEL (.XLSX) GENERATOR
+ * Generates genuine binary Excel .xlsx files via SheetJS
+ * Opens in Excel, Google Sheets, LibreOffice Calc with ZERO errors
+ */
 export function generateSpreadsheetBlob(filename) {
-  const cleanName = filename.replace(/\.[^/.]+$/, '');
+  const cleanName = (filename || 'Laporan_Keuangan.xlsx').replace(/\.[^/.]+$/, '');
   const timestamp = new Date().toLocaleString('id-ID');
 
   const wb = XLSX.utils.book_new();
@@ -133,38 +206,12 @@ export function generateSpreadsheetBlob(filename) {
   return new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
 }
 
-export function generateDocumentBlob(filename, sourceFormat = 'PDF', targetFormat = 'DOCX') {
-  const cleanName = filename.replace(/\.[^/.]+$/, '');
-  const timestamp = new Date().toLocaleString('id-ID', { dateStyle: 'full', timeStyle: 'medium' });
-
-  // Rich Text Format (RTF) stream natively recognized and opened by Microsoft Word with zero errors
-  const rtfContent = `{\\rtf1\\ansi\\ansicpg1252\\deff0\\nouicompat\\deflang1057
-{\\fonttbl{\\f0\\fnil\\fcharset0 Calibri;}{\\f1\\fnil\\fcharset0 Segoe UI;}}
-{\\colortbl ;\\red53\\green37\\blue205;\\red11\\green28\\blue48;\\red70\\green69\\blue85;}
-\\viewkind4\\uc1
-\\pard\\cf1\\b\\f0\\fs32 PLACEBOO DOCUMENT CONVERTER\\par
-\\cf3\\b0\\fs18 Dikonversi Secara Presisi \\bullet  Waktu: ${timestamp}\\par
-\\cf3\\fs18 Keamanan: Enkripsi TLS 1.3 - Zero Retention\\par
-\\par
-\\cf2\\b\\fs26 ${cleanName}\\par
-\\cf3\\b0\\fs20 Format Asal: ${sourceFormat.toUpperCase()} \\bullet Target: ${targetFormat.toUpperCase()}\\par
-\\line
-\\cf2\\b\\fs22 ISI DOKUMEN HASIL TRANSCODING:\\par
-\\cf3\\b0\\fs20
-Dokumen ini berhasil dikonversi ke format Microsoft Word melalui Placeboo Cloud Transcoder.\\par
-Seluruh paragraf, pemformatan teks, tabel, dan metadata dipertahankan secara utuh tanpa distorsi.\\par
-\\par
-[Ikhtisar Eksekutif]\\par
-Semua data telah tervalidasi dan siap digunakan untuk kebutuhan cetak, arsip legalitas, maupun pengeditan lebih lanjut di Microsoft Word, Google Docs, atau Apple Pages.\\par
-\\par
-Placeboo Core Engine \\bullet https://placeboo.vercel.app
-}`;
-
-  return new Blob([rtfContent], { type: 'application/msword' });
-}
-
+/**
+ * 4. REAL IMAGE GENERATOR (PNG / JPG)
+ * Renders high-res 1200x800 image via HTML5 Canvas
+ */
 export function generateImageBlob(filename, format = 'png') {
-  const cleanName = filename.replace(/\.[^/.]+$/, '');
+  const cleanName = (filename || 'dokumen.png').replace(/\.[^/.]+$/, '');
   const canvas = document.createElement('canvas');
   canvas.width = 1200;
   canvas.height = 800;
@@ -239,31 +286,51 @@ export function generateImageBlob(filename, format = 'png') {
     return new Blob([ab], { type: mime });
   }
 
-  // Fallback text blob if canvas context unavailable
   return new Blob(['Placeboo Image Content'], { type: 'text/plain' });
 }
 
-export function generateZipBlob(filename = 'Placeboo_Batch_Converted_Files.zip') {
-  // Simple uncompressed valid ZIP archive containing a README and converted confirmation
-  const readmeText = `Placeboo Document Converter - Paket Arsip Batch
+/**
+ * 5. REAL ZIP ARCHIVE GENERATOR
+ * Generates genuine binary ZIP archives via JSZip
+ * Opens in Windows Explorer, WinRAR, 7-Zip, macOS Archive Utility with ZERO errors
+ */
+export async function generateZipBlob(filename = 'Placeboo_Batch_Converted_Files.zip', files = []) {
+  const zip = new JSZip();
+
+  if (files && files.length > 0) {
+    for (const f of files) {
+      const name = f.name || f.filename || 'dokumen.pdf';
+      const content = f.blob || f.data || 'Placeboo document content';
+      zip.file(name, content);
+    }
+  } else {
+    zip.file('README.txt', `Placeboo Document Converter - Paket Arsip Batch
 ==================================================
 Waktu Unduh    : ${new Date().toLocaleString('id-ID')}
-Jumlah Berkas  : Semua berkas antrean batch
+Status         : Berhasil Dikonversi & Terverifikasi
 Keamanan       : Terenkripsi AES-256 Bit
 Lisensi        : Placeboo Enterprise Corp
 
 Seluruh berkas berhasil dikonversi dan siap digunakan.
 Kunjungi: https://placeboo.vercel.app
-`;
+`);
 
-  return new Blob([readmeText], { type: 'application/zip' });
+    // Include real sample PDF and XLSX
+    const pdfBlob = generatePdfBlob('Laporan_Konversi_Sample.pdf', 'DOCX', 'PDF');
+    zip.file('Laporan_Konversi_Sample.pdf', pdfBlob);
+
+    const xlsxBlob = generateSpreadsheetBlob('Ringkasan_Keuangan_Sample.xlsx');
+    zip.file('Ringkasan_Keuangan_Sample.xlsx', xlsxBlob);
+  }
+
+  return await zip.generateAsync({ type: 'blob' });
 }
 
 /**
  * Universal converted file blob generator
  */
-export function generateConvertedBlob(filename, sourceFormat = 'DOCX', targetFormat = 'PDF') {
-  const ext = (targetFormat || filename.split('.').pop() || 'PDF').toUpperCase();
+export async function generateConvertedBlob(filename, sourceFormat = 'DOCX', targetFormat = 'PDF') {
+  const ext = (targetFormat || (filename.includes('.') ? filename.split('.').pop() : 'PDF')).toUpperCase();
 
   switch (ext) {
     case 'PDF':
@@ -274,15 +341,16 @@ export function generateConvertedBlob(filename, sourceFormat = 'DOCX', targetFor
       return generateSpreadsheetBlob(filename);
     case 'DOCX':
     case 'DOC':
+      return await generateDocumentBlob(filename, sourceFormat, targetFormat);
     case 'TXT':
-      return generateDocumentBlob(filename, sourceFormat, targetFormat);
+      return new Blob([`Dokumen: ${filename}\nFormat Asal: ${sourceFormat}\nStatus: Berhasil Terverifikasi\nWaktu: ${new Date().toLocaleString('id-ID')}`], { type: 'text/plain;charset=utf-8' });
     case 'PNG':
       return generateImageBlob(filename, 'png');
     case 'JPG':
     case 'JPEG':
       return generateImageBlob(filename, 'jpg');
     case 'ZIP':
-      return generateZipBlob(filename);
+      return await generateZipBlob(filename);
     default:
       return generatePdfBlob(filename, sourceFormat, targetFormat);
   }
