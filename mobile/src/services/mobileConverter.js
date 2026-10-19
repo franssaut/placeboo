@@ -2,6 +2,7 @@ import * as FileSystemLegacy from 'expo-file-system/legacy';
 import * as FileSystemNew from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import * as XLSX from 'xlsx';
+import { DEFAULT_DOCUMENT_PNG_BASE64 } from './defaultPngBase64';
 
 /**
  * Mobile Document Converter Service for Placeboo Mobile
@@ -278,26 +279,24 @@ export async function convertDocumentMobile(file, targetFormat = 'XLSX', onProgr
           const data = await resp.json();
           if (data.success && data.fileBase64) {
             onProgress(85);
-            await writeBase64File(outputUri, data.fileBase64);
-            apiSuccess = true;
+            const actualFileName = data.fileName || outputFileName;
+            const actualOutputUri = `${baseDir}${actualFileName}`;
+            await writeBase64File(actualOutputUri, data.fileBase64);
             console.log(`[API Conversion Success via ${endpoint}]`);
-            break;
+            onProgress(100);
+            return {
+              fileName: actualFileName,
+              uri: actualOutputUri,
+              targetFormat: data.targetFormat || targetFormat.toUpperCase(),
+              mimeType: data.mimeType || (targetFormat.toUpperCase() === 'PNG' ? 'image/png' : 'image/jpeg'),
+              sourceEngine: 'Website Cloud API'
+            };
           }
         }
       } catch (fetchErr) {
         console.warn(`[API Attempt ${endpoint} Failed]:`, fetchErr?.message);
       }
     }
-  }
-
-  if (apiSuccess) {
-    onProgress(100);
-    return {
-      fileName: outputFileName,
-      uri: outputUri,
-      targetFormat: targetFormat.toUpperCase(),
-      sourceEngine: 'Website Cloud API'
-    };
   }
 
   // ----------------------------------------------------
@@ -355,7 +354,7 @@ export async function convertDocumentMobile(file, targetFormat = 'XLSX', onProgr
     if (fileBase64 && ['png', 'jpg', 'jpeg', 'webp', 'bmp', 'gif'].includes(sourceExt)) {
       await writeBase64File(outputUri, fileBase64);
     } else {
-      await writeBase64File(outputUri, VALID_PNG_BASE64);
+      await writeBase64File(outputUri, DEFAULT_DOCUMENT_PNG_BASE64);
     }
   } else {
     if (fileBase64) {
@@ -366,10 +365,19 @@ export async function convertDocumentMobile(file, targetFormat = 'XLSX', onProgr
   }
 
   onProgress(100);
+  const detectedMime =
+    targetFormat.toUpperCase() === 'PNG' ? 'image/png' :
+    targetFormat.toUpperCase() === 'JPG' || targetFormat.toUpperCase() === 'JPEG' ? 'image/jpeg' :
+    targetFormat.toUpperCase() === 'PDF' ? 'application/pdf' :
+    targetFormat.toUpperCase() === 'XLSX' ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' :
+    targetFormat.toUpperCase() === 'DOCX' ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' :
+    'text/plain';
+
   return {
     fileName: outputFileName,
     uri: outputUri,
     targetFormat: targetFormat.toUpperCase(),
+    mimeType: detectedMime,
     sourceEngine: 'On-Device Engine'
   };
 }

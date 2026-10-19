@@ -113,7 +113,20 @@ export default function HomeScreen({ defaultFormat = 'XLSX' }) {
 
   const handleShare = async () => {
     if (convertedResult && convertedResult.uri) {
-      const success = await shareFileNative(convertedResult.uri);
+      const mime =
+        convertedResult.mimeType ||
+        (targetFormat === 'PNG'
+          ? 'image/png'
+          : targetFormat === 'JPG' || targetFormat === 'JPEG'
+          ? 'image/jpeg'
+          : targetFormat === 'PDF'
+          ? 'application/pdf'
+          : targetFormat === 'XLSX'
+          ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+          : targetFormat === 'DOCX'
+          ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+          : 'text/plain');
+      const success = await shareFileNative(convertedResult.uri, mime);
       if (!success) {
         Alert.alert('Informasi', 'Fitur penyimpanan berkas telah dibuka di sistem perangkat Anda.');
       }
