@@ -226,38 +226,68 @@ const VALID_PNG_BASE64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQV
  * Main Conversion Function
  * Calls Website API with Automatic On-Device Fallback
  */
-export async function convertDocumentMobile(file, targetFormat = 'XLSX', onProgress = () => {}) {
-  const cleanName = (file.name || 'Dokumen').replace(/\.[^/.]+$/, '');
-  const sourceExt = file.name && file.name.includes('.') ? file.name.split('.').pop().toLowerCase() : '';
+export async function convertDocumentMobile(filesInput, targetFormat = 'XLSX', onProgress = () => {}) {
+  const isMulti = Array.isArray(filesInput);
+  const files = isMulti ? filesInput.slice(0, 20) : [filesInput];
+  const primaryFile = files[0] || {};
+  const cleanName = (primaryFile.name || 'Dokumen').replace(/\.[^/.]+$/, '');
+  const sourceExt = primaryFile.name && primaryFile.name.includes('.') ? primaryFile.name.split('.').pop().toLowerCase() : '';
   const targetExt = targetFormat.toLowerCase();
-  const outputFileName = `${cleanName}_converted.${targetExt}`;
+  const outputFileName = isMulti ? `${cleanName}_koleksi.${targetExt}` : `${cleanName}_converted.${targetExt}`;
   const baseDir = getStorageDirectory();
   const outputUri = `${baseDir}${outputFileName}`;
 
-  onProgress(15);
+  onProgress(10);
 
   // ----------------------------------------------------
-  // STEP 1: READ FILE AS BASE64 (UNIVERSAL)
+  // STEP 1: READ FILE(S) AS BASE64 (UNIVERSAL)
   // ----------------------------------------------------
-  onProgress(25);
-  const fileBase64 = await readFileAsBase64(file.uri);
+  const imagesPayload = [];
+  let singleFileBase64 = '';
+
+  for (let idx = 0; idx < files.length; idx++) {
+    const f = files[idx];
+    const b64 = await readFileAsBase64(f.uri);
+    if (b64) {
+      if (idx === 0) singleFileBase64 = b64;
+      imagesPayload.push({
+        fileName: f.name || `image_${idx + 1}.jpg`,
+        fileBase64: b64,
+        size: f.size || 0
+      });
+    }
+    const readProgress = Math.round(15 + ((idx + 1) / files.length) * 35);
+    onProgress(readProgress);
+  }
 
   // ----------------------------------------------------
   // STEP 2: ATTEMPT WEBSITE API CONVERSION (CLOUD ENGINE)
   // ----------------------------------------------------
-  let apiSuccess = false;
+  if (imagesPayload.length > 0) {
+    onProgress(55);
 
-  if (fileBase64 && fileBase64.length > 0) {
-    onProgress(45);
-
-    // Try local network API first (fastest on Wi-Fi), then cloud website API
     const endpoints = [PLACEBOO_LOCAL_API_URL, PLACEBOO_API_URL];
+    const timeoutMs = isMulti ? 25000 : 8000;
 
     for (const endpoint of endpoints) {
       try {
-        console.log(`[Connecting to API: ${endpoint}]`);
+        console.log(`[Connecting to API: ${endpoint} for ${imagesPayload.length} file(s)]`);
         const controller = new AbortController();
-        const timer = setTimeout(() => controller.abort(), 8000); // 8s timeout
+        const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+        const requestBody = isMulti
+          ? {
+              fileName: outputFileName,
+              targetFormat,
+              sourceFormat: 'images',
+              images: imagesPayload
+            }
+          : {
+              fileName: primaryFile.name,
+              fileBase64: singleFileBase64,
+              targetFormat,
+              sourceFormat: sourceExt
+            };
 
         const resp = await fetch(endpoint, {
           method: 'POST',
@@ -265,12 +295,7 @@ export async function convertDocumentMobile(file, targetFormat = 'XLSX', onProgr
             'Content-Type': 'application/json',
             'Accept': 'application/json'
           },
-          body: JSON.stringify({
-            fileName: file.name,
-            fileBase64,
-            targetFormat,
-            sourceFormat: sourceExt
-          }),
+          body: JSON.stringify(requestBody),
           signal: controller.signal
         });
         clearTimeout(timer);
@@ -278,7 +303,7 @@ export async function convertDocumentMobile(file, targetFormat = 'XLSX', onProgr
         if (resp.ok) {
           const data = await resp.json();
           if (data.success && data.fileBase64) {
-            onProgress(85);
+            onProgress(90);
             const actualFileName = data.fileName || outputFileName;
             const actualOutputUri = `${baseDir}${actualFileName}`;
             await writeBase64File(actualOutputUri, data.fileBase64);
@@ -288,8 +313,9 @@ export async function convertDocumentMobile(file, targetFormat = 'XLSX', onProgr
               fileName: actualFileName,
               uri: actualOutputUri,
               targetFormat: data.targetFormat || targetFormat.toUpperCase(),
-              mimeType: data.mimeType || (targetFormat.toUpperCase() === 'PNG' ? 'image/png' : 'image/jpeg'),
-              sourceEngine: 'Website Cloud API'
+              mimeType: data.mimeType || (targetFormat.toUpperCase() === 'PNG' ? 'image/png' : targetFormat.toUpperCase() === 'PDF' ? 'application/pdf' : 'image/jpeg'),
+              sourceEngine: 'Website Cloud API',
+              pageCount: isMulti ? imagesPayload.length : 1
             };
           }
         }
@@ -303,7 +329,7 @@ export async function convertDocumentMobile(file, targetFormat = 'XLSX', onProgr
   // STEP 3: ON-DEVICE FALLBACK ENGINE
   // ----------------------------------------------------
   console.log('[Running On-Device Fallback Conversion Engine]');
-  onProgress(60);
+  onProgress(70);
 
   if (targetFormat.toUpperCase() === 'XLSX' || targetFormat.toUpperCase() === 'XLS') {
     let contentText = await readTextFile(file.uri);

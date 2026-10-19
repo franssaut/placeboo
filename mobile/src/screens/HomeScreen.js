@@ -18,9 +18,12 @@ import {
   shareFileNative
 } from '../services/mobileConverter';
 
+const MAX_IMAGES_LIMIT = 20;
+
 export default function HomeScreen({ mode = 'pdf_to_image', onModeChange }) {
   const [activeMode, setActiveMode] = useState(mode);
-  const [selectedFile, setSelectedFile] = useState(null);
+  const [selectedPdf, setSelectedPdf] = useState(null);
+  const [selectedImages, setSelectedImages] = useState([]);
   const [targetFormat, setTargetFormat] = useState('PNG');
   const [isConverting, setIsConverting] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -35,8 +38,8 @@ export default function HomeScreen({ mode = 'pdf_to_image', onModeChange }) {
 
   const handleSwitchMode = (newMode) => {
     setActiveMode(newMode);
-    setSelectedFile(null);
     setConvertedResult(null);
+    setProgress(0);
     if (newMode === 'pdf_to_image') {
       setTargetFormat('PNG');
     } else {
@@ -49,19 +52,17 @@ export default function HomeScreen({ mode = 'pdf_to_image', onModeChange }) {
 
   const isPdfToImage = activeMode === 'pdf_to_image';
 
-  const pickDocument = async () => {
+  // Pick PDF (Single file)
+  const pickPdfDocument = async () => {
     try {
-      const allowedTypes = isPdfToImage ? ['application/pdf'] : ['image/*'];
-
       const result = await DocumentPicker.getDocumentAsync({
-        type: allowedTypes,
+        type: ['application/pdf'],
         copyToCacheDirectory: true
       });
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
         const file = result.assets[0];
 
-        // 50 MB file limit check
         if (file.size && file.size > MAX_FILE_SIZE) {
           Alert.alert(
             'Batas Ukuran Terlampaui',
@@ -71,9 +72,7 @@ export default function HomeScreen({ mode = 'pdf_to_image', onModeChange }) {
         }
 
         const ext = file.name && file.name.includes('.') ? file.name.split('.').pop().toLowerCase() : '';
-
-        // Validation based on active mode
-        if (isPdfToImage && ext !== 'pdf') {
+        if (ext !== 'pdf') {
           Alert.alert(
             'Berkas Tidak Sesuai',
             'Silakan pilih berkas dokumen berformat PDF untuk mode PDF ke Gambar.'
@@ -81,55 +80,137 @@ export default function HomeScreen({ mode = 'pdf_to_image', onModeChange }) {
           return;
         }
 
-        if (!isPdfToImage && !['png', 'jpg', 'jpeg', 'webp', 'bmp'].includes(ext)) {
-          Alert.alert(
-            'Berkas Tidak Sesuai',
-            'Silakan pilih berkas gambar (JPG, PNG, atau WEBP) untuk mode Gambar ke PDF.'
-          );
-          return;
-        }
-
-        setSelectedFile(file);
+        setSelectedPdf(file);
         setConvertedResult(null);
       }
     } catch (err) {
-      console.warn('Pick document error:', err);
-      Alert.alert('Gagal Memilih Berkas', 'Terjadi kesalahan saat mengakses berkas pada perangkat.');
+      console.warn('Pick PDF error:', err);
+      Alert.alert('Gagal Memilih Berkas', 'Terjadi kesalahan saat mengakses berkas PDF.');
     }
   };
 
-  const handleConvert = async () => {
-    if (!selectedFile) {
-      Alert.alert(
-        'Pilih Berkas',
-        isPdfToImage
-          ? 'Silakan pilih berkas PDF yang ingin dikonversi.'
-          : 'Silakan pilih berkas Gambar yang ingin dikonversi ke PDF.'
-      );
-      return;
-    }
-
-    setIsConverting(true);
-    setProgress(15);
-
+  // Pick Images (Multiple files up to 20)
+  const pickImages = async () => {
     try {
-      const result = await convertDocumentMobile(selectedFile, targetFormat, (p) => {
-        setProgress(p);
+      const remainingSlots = MAX_IMAGES_LIMIT - selectedImages.length;
+      if (remainingSlots <= 0) {
+        Alert.alert(
+          'Batas Maksimal Terpenuhi',
+          `Anda telah memilih batas maksimal ${MAX_IMAGES_LIMIT} gambar.`
+        );
+        return;
+      }
+
+      const result = await DocumentPicker.getDocumentAsync({
+        type: ['image/*'],
+        multiple: true,
+        copyToCacheDirectory: true
       });
 
-      setConvertedResult(result);
-      Alert.alert(
-        'Konversi Berhasil',
-        `Berkas berhasil dikonversi ke ${targetFormat} via ${result.sourceEngine || 'Placeboo'}!`
-      );
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        const validExtensions = ['png', 'jpg', 'jpeg', 'webp', 'bmp'];
+        const validIncoming = [];
+
+        for (const file of result.assets) {
+          const ext = file.name && file.name.includes('.') ? file.name.split('.').pop().toLowerCase() : '';
+          if (validExtensions.includes(ext)) {
+            if (file.size && file.size > MAX_FILE_SIZE) {
+              Alert.alert('Ukuran Terlampaui', `Berkas ${file.name} melebihi 50 MB dan dilewati.`);
+              continue;
+            }
+            validIncoming.push(file);
+          }
+        }
+
+        if (validIncoming.length === 0) {
+          Alert.alert('Format Tidak Sesuai', 'Mohon pilih berkas gambar berformat JPG, JPEG, PNG, atau WEBP.');
+          return;
+        }
+
+        const combined = [...selectedImages, ...validIncoming];
+        if (combined.length > MAX_IMAGES_LIMIT) {
+          Alert.alert(
+            'Batas 20 Gambar',
+            `Hanya ${MAX_IMAGES_LIMIT} gambar pertama yang akan diproses ke dalam PDF.`
+          );
+          setSelectedImages(combined.slice(0, MAX_IMAGES_LIMIT));
+        } else {
+          setSelectedImages(combined);
+        }
+
+        setConvertedResult(null);
+      }
     } catch (err) {
-      console.error('Convert document error:', err);
-      Alert.alert(
-        'Konversi Gagal',
-        `Terjadi kendala saat memproses: ${err?.message || 'Gagal memproses dokumen.'}`
-      );
-    } finally {
-      setIsConverting(false);
+      console.warn('Pick images error:', err);
+      Alert.alert('Gagal Memilih Gambar', 'Terjadi kesalahan saat mengakses galeri gambar.');
+    }
+  };
+
+  const handleRemoveImage = (indexToRemove) => {
+    const updated = selectedImages.filter((_, idx) => idx !== indexToRemove);
+    setSelectedImages(updated);
+  };
+
+  const handleClearImages = () => {
+    setSelectedImages([]);
+    setConvertedResult(null);
+  };
+
+  const handleConvert = async () => {
+    if (isPdfToImage) {
+      if (!selectedPdf) {
+        Alert.alert('Pilih Berkas PDF', 'Silakan pilih berkas PDF yang ingin dikonversi.');
+        return;
+      }
+
+      setIsConverting(true);
+      setProgress(15);
+
+      try {
+        const result = await convertDocumentMobile(selectedPdf, targetFormat, (p) => {
+          setProgress(p);
+        });
+
+        setConvertedResult(result);
+        Alert.alert(
+          'Konversi Berhasil',
+          `Berkas PDF berhasil dikonversi ke gambar ${targetFormat}!`
+        );
+      } catch (err) {
+        console.error('Convert PDF error:', err);
+        Alert.alert('Konversi Gagal', `Terjadi kendala: ${err?.message || 'Gagal memproses dokumen.'}`);
+      } finally {
+        setIsConverting(false);
+      }
+    } else {
+      // Image to PDF mode
+      if (selectedImages.length === 0) {
+        Alert.alert(
+          'Pilih Gambar',
+          'Silakan pilih minimal 1 gambar (maksimal 20 gambar) untuk dikonversi ke PDF.'
+        );
+        return;
+      }
+
+      setIsConverting(true);
+      setProgress(10);
+
+      try {
+        const result = await convertDocumentMobile(selectedImages, 'PDF', (p) => {
+          setProgress(p);
+        });
+
+        setConvertedResult(result);
+        Alert.alert(
+          'Konversi Berhasil',
+          `${selectedImages.length} gambar berhasil digabungkan menjadi 1 berkas PDF!`
+        );
+      } catch (err) {
+        console.error('Convert Images to PDF error:', err);
+        Alert.alert('Konversi Gagal', `Terjadi kendala: ${err?.message || 'Gagal menggabungkan gambar.'}`);
+      } finally {
+        setIsConverting(false);
+      }
     }
   };
 
@@ -151,7 +232,8 @@ export default function HomeScreen({ mode = 'pdf_to_image', onModeChange }) {
   };
 
   const handleReset = () => {
-    setSelectedFile(null);
+    setSelectedPdf(null);
+    setSelectedImages([]);
     setConvertedResult(null);
     setProgress(0);
   };
@@ -168,7 +250,7 @@ export default function HomeScreen({ mode = 'pdf_to_image', onModeChange }) {
           </View>
         </View>
         <Text style={styles.subtitle}>
-          Spesialis Konversi PDF ↔ Gambar Cepat, Tajam, &amp; Maks. 50 MB.
+          Spesialis Konversi PDF ↔ Gambar Cepat, Tajam, &amp; Maks. 20 Gambar ke PDF.
         </Text>
       </View>
 
@@ -211,123 +293,179 @@ export default function HomeScreen({ mode = 'pdf_to_image', onModeChange }) {
           <Text style={styles.cardHeader}>
             {isPdfToImage ? 'Konversi PDF ke Gambar' : 'Konversi Gambar ke PDF'}
           </Text>
-          <View style={styles.modePill}>
-            <Text style={styles.modePillText}>
-              {isPdfToImage ? 'PDF → PNG/JPG' : 'IMG → PDF'}
+          <View style={[styles.modePill, !isPdfToImage && styles.modePillAmber]}>
+            <Text style={[styles.modePillText, !isPdfToImage && styles.modePillTextAmber]}>
+              {isPdfToImage ? 'PDF → PNG/JPG' : 'Hingga 20 Foto → PDF'}
             </Text>
           </View>
         </View>
 
-        {!selectedFile ? (
-          <TouchableOpacity style={styles.dropzone} onPress={pickDocument} activeOpacity={0.8}>
-            <View style={[styles.iconCircle, !isPdfToImage && styles.iconCircleAmber]}>
-              <MaterialIcons
-                name={isPdfToImage ? 'picture-as-pdf' : 'add-photo-alternate'}
-                size={34}
-                color={isPdfToImage ? '#4f46e5' : '#d97706'}
-              />
-            </View>
-            <Text style={styles.dropzoneTitle}>
-              {isPdfToImage ? 'Pilih Berkas PDF' : 'Pilih Berkas Gambar'}
-            </Text>
-            <Text style={styles.dropzoneSubtitle}>
-              {isPdfToImage
-                ? 'Ketuk untuk memilih berkas PDF dari HP (Maks. 50 MB)'
-                : 'Mendukung foto/gambar JPG, JPEG, PNG, WEBP (Maks. 50 MB)'}
-            </Text>
-          </TouchableOpacity>
-        ) : (
-          <View style={styles.fileSelectedBox}>
-            <View style={styles.fileInfoRow}>
-              <View style={[styles.fileIconBox, !isPdfToImage && styles.fileIconBoxAmber]}>
-                <MaterialIcons
-                  name={isPdfToImage ? 'picture-as-pdf' : 'image'}
-                  size={26}
-                  color={isPdfToImage ? '#4f46e5' : '#d97706'}
-                />
-              </View>
-              <View style={styles.fileTextCol}>
-                <Text style={styles.fileName} numberOfLines={1}>
-                  {selectedFile.name}
+        {/* 1. PDF TO IMAGE UPLOAD SECTION */}
+        {isPdfToImage && (
+          <>
+            {!selectedPdf ? (
+              <TouchableOpacity style={styles.dropzone} onPress={pickPdfDocument} activeOpacity={0.8}>
+                <View style={styles.iconCircle}>
+                  <MaterialIcons name="picture-as-pdf" size={34} color="#4f46e5" />
+                </View>
+                <Text style={styles.dropzoneTitle}>Pilih Berkas PDF</Text>
+                <Text style={styles.dropzoneSubtitle}>
+                  Ketuk untuk memilih berkas PDF dari HP (Maks. 50 MB)
                 </Text>
-                <Text style={styles.fileSize}>{formatBytes(selectedFile.size || 0)}</Text>
-              </View>
-              <TouchableOpacity onPress={() => setSelectedFile(null)}>
-                <MaterialIcons name="close" size={22} color="#ef4444" />
               </TouchableOpacity>
-            </View>
+            ) : (
+              <View style={styles.fileSelectedBox}>
+                <View style={styles.fileInfoRow}>
+                  <View style={styles.fileIconBox}>
+                    <MaterialIcons name="picture-as-pdf" size={26} color="#4f46e5" />
+                  </View>
+                  <View style={styles.fileTextCol}>
+                    <Text style={styles.fileName} numberOfLines={1}>
+                      {selectedPdf.name}
+                    </Text>
+                    <Text style={styles.fileSize}>{formatBytes(selectedPdf.size || 0)}</Text>
+                  </View>
+                  <TouchableOpacity onPress={() => setSelectedPdf(null)}>
+                    <MaterialIcons name="close" size={22} color="#ef4444" />
+                  </TouchableOpacity>
+                </View>
 
-            <TouchableOpacity style={styles.btnChangeFile} onPress={pickDocument}>
-              <Text style={styles.btnChangeFileText}>Ganti Berkas Lain</Text>
-            </TouchableOpacity>
-          </View>
+                <TouchableOpacity style={styles.btnChangeFile} onPress={pickPdfDocument}>
+                  <Text style={styles.btnChangeFileText}>Ganti Berkas PDF</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {/* Target Format Selector for PDF to Image */}
+            <View style={styles.formatSection}>
+              <Text style={styles.labelSection}>Pilih Format Gambar Output:</Text>
+              <View style={styles.formatRow}>
+                <TouchableOpacity
+                  style={[styles.formatChip, targetFormat === 'PNG' && styles.formatChipActive]}
+                  onPress={() => setTargetFormat('PNG')}
+                  activeOpacity={0.7}
+                >
+                  <MaterialIcons
+                    name="image"
+                    size={16}
+                    color={targetFormat === 'PNG' ? '#ffffff' : '#64748b'}
+                  />
+                  <Text
+                    style={[
+                      styles.formatChipText,
+                      targetFormat === 'PNG' && styles.formatChipTextActive
+                    ]}
+                  >
+                    PNG (Resolusi Tinggi)
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.formatChip, targetFormat === 'JPG' && styles.formatChipActive]}
+                  onPress={() => setTargetFormat('JPG')}
+                  activeOpacity={0.7}
+                >
+                  <MaterialIcons
+                    name="photo"
+                    size={16}
+                    color={targetFormat === 'JPG' ? '#ffffff' : '#64748b'}
+                  />
+                  <Text
+                    style={[
+                      styles.formatChipText,
+                      targetFormat === 'JPG' && styles.formatChipTextActive
+                    ]}
+                  >
+                    JPG (Ukuran Ringan)
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </>
         )}
 
-        {/* Format Selector */}
-        {isPdfToImage ? (
-          <View style={styles.formatSection}>
-            <Text style={styles.labelSection}>Pilih Format Gambar Output:</Text>
-            <View style={styles.formatRow}>
-              <TouchableOpacity
-                style={[styles.formatChip, targetFormat === 'PNG' && styles.formatChipActive]}
-                onPress={() => setTargetFormat('PNG')}
-                activeOpacity={0.7}
-              >
-                <MaterialIcons
-                  name="image"
-                  size={16}
-                  color={targetFormat === 'PNG' ? '#ffffff' : '#64748b'}
-                />
-                <Text
-                  style={[
-                    styles.formatChipText,
-                    targetFormat === 'PNG' && styles.formatChipTextActive
-                  ]}
-                >
-                  PNG (Resolusi Tinggi)
+        {/* 2. IMAGE TO PDF MULTI-UPLOAD SECTION */}
+        {!isPdfToImage && (
+          <>
+            {selectedImages.length === 0 ? (
+              <TouchableOpacity style={styles.dropzone} onPress={pickImages} activeOpacity={0.8}>
+                <View style={[styles.iconCircle, styles.iconCircleAmber]}>
+                  <MaterialIcons name="add-photo-alternate" size={34} color="#d97706" />
+                </View>
+                <Text style={styles.dropzoneTitle}>Pilih Gambar (Maks. 20)</Text>
+                <Text style={styles.dropzoneSubtitle}>
+                  Bisa pilih banyak gambar sekaligus (JPG, PNG, WEBP). Semua akan digabung ke 1 berkas PDF.
                 </Text>
               </TouchableOpacity>
+            ) : (
+              <View style={styles.multiImagesContainer}>
+                {/* Count Header & Controls */}
+                <View style={styles.multiHeaderRow}>
+                  <View style={styles.countBadge}>
+                    <MaterialIcons name="photo-library" size={14} color="#b45309" />
+                    <Text style={styles.countBadgeText}>
+                      {selectedImages.length} / {MAX_IMAGES_LIMIT} Gambar Dipilih
+                    </Text>
+                  </View>
 
-              <TouchableOpacity
-                style={[styles.formatChip, targetFormat === 'JPG' && styles.formatChipActive]}
-                onPress={() => setTargetFormat('JPG')}
-                activeOpacity={0.7}
-              >
-                <MaterialIcons
-                  name="photo"
-                  size={16}
-                  color={targetFormat === 'JPG' ? '#ffffff' : '#64748b'}
-                />
-                <Text
-                  style={[
-                    styles.formatChipText,
-                    targetFormat === 'JPG' && styles.formatChipTextActive
-                  ]}
-                >
-                  JPG (Ukuran Ringan)
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        ) : (
-          <View style={styles.formatSection}>
-            <Text style={styles.labelSection}>Format Output Terpilih:</Text>
-            <View style={styles.formatRow}>
-              <View style={[styles.formatChip, styles.formatChipActive]}>
-                <MaterialIcons name="picture-as-pdf" size={16} color="#ffffff" />
-                <Text style={[styles.formatChipText, styles.formatChipTextActive]}>
-                  Dokumen PDF (.pdf)
-                </Text>
+                  <View style={styles.multiActionGroup}>
+                    {selectedImages.length < MAX_IMAGES_LIMIT && (
+                      <TouchableOpacity style={styles.btnAddMore} onPress={pickImages}>
+                        <MaterialIcons name="add" size={16} color="#4f46e5" />
+                        <Text style={styles.btnAddMoreText}>Tambah</Text>
+                      </TouchableOpacity>
+                    )}
+                    <TouchableOpacity style={styles.btnClearAll} onPress={handleClearImages}>
+                      <Text style={styles.btnClearAllText}>Hapus Semua</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+
+                {/* List of Selected Images */}
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.thumbScroll}>
+                  {selectedImages.map((img, idx) => (
+                    <View key={idx} style={styles.thumbCard}>
+                      <Image source={{ uri: img.uri }} style={styles.thumbImage} resizeMode="cover" />
+                      <View style={styles.thumbPageBadge}>
+                        <Text style={styles.thumbPageBadgeText}>Hal. {idx + 1}</Text>
+                      </View>
+                      <TouchableOpacity
+                        style={styles.thumbDeleteBtn}
+                        onPress={() => handleRemoveImage(idx)}
+                      >
+                        <MaterialIcons name="close" size={14} color="#ffffff" />
+                      </TouchableOpacity>
+                      <Text style={styles.thumbName} numberOfLines={1}>
+                        {img.name}
+                      </Text>
+                    </View>
+                  ))}
+                </ScrollView>
+              </View>
+            )}
+
+            {/* Target Format Fixed Info */}
+            <View style={styles.formatSection}>
+              <Text style={styles.labelSection}>Format Output Terpilih:</Text>
+              <View style={styles.formatRow}>
+                <View style={[styles.formatChip, styles.formatChipActive]}>
+                  <MaterialIcons name="picture-as-pdf" size={16} color="#ffffff" />
+                  <Text style={[styles.formatChipText, styles.formatChipTextActive]}>
+                    Dokumen PDF Standar (.pdf)
+                  </Text>
+                </View>
               </View>
             </View>
-          </View>
+          </>
         )}
 
         {/* Progress Bar during conversion */}
         {isConverting && (
           <View style={styles.progressContainer}>
             <View style={styles.progressHeaderRow}>
-              <Text style={styles.progressText}>Memproses Konversi...</Text>
+              <Text style={styles.progressText}>
+                {isPdfToImage ? 'Memproses Konversi PDF...' : `Menyusun ${selectedImages.length} Halaman PDF...`}
+              </Text>
               <Text style={styles.progressPercent}>{progress}%</Text>
             </View>
             <View style={styles.progressBarBg}>
@@ -341,23 +479,23 @@ export default function HomeScreen({ mode = 'pdf_to_image', onModeChange }) {
           <View style={styles.successBox}>
             <View style={styles.successHeaderRow}>
               <View style={styles.successIconBox}>
-                <MaterialIcons name="check-circle" size={26} color="#10b981" />
+                <MaterialIcons name="check-circle" size={28} color="#10b981" />
               </View>
               <View style={styles.successTextCol}>
                 <Text style={styles.successTitle}>Konversi Berhasil!</Text>
                 <Text style={styles.successFileName} numberOfLines={1}>
                   {convertedResult.fileName}
                 </Text>
+                {!isPdfToImage && (
+                  <Text style={styles.successPageCountText}>
+                    Dokumen berisi {convertedResult.pageCount || selectedImages.length} halaman gambar.
+                  </Text>
+                )}
               </View>
             </View>
 
             {/* Live Image Preview for PDF to Image */}
-            {Boolean(
-              convertedResult.uri &&
-                (convertedResult.targetFormat === 'PNG' ||
-                  convertedResult.targetFormat === 'JPG' ||
-                  convertedResult.mimeType?.startsWith('image/'))
-            ) && (
+            {isPdfToImage && Boolean(convertedResult.uri) && (
               <View style={styles.previewImageContainer}>
                 <Text style={styles.previewLabel}>Pratinjau Hasil Dokumen Gambar:</Text>
                 <Image
@@ -371,10 +509,10 @@ export default function HomeScreen({ mode = 'pdf_to_image', onModeChange }) {
             <View style={styles.successActionRow}>
               <TouchableOpacity style={styles.btnShare} onPress={handleShare}>
                 <MaterialIcons name="share" size={18} color="#ffffff" />
-                <Text style={styles.btnShareText}>Buka / Bagikan</Text>
+                <Text style={styles.btnShareText}>Buka / Bagikan Berkas</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.btnResetSmall} onPress={handleReset}>
-                <MaterialIcons name="refresh" size={16} color="#475569" />
+                <MaterialIcons name="refresh" size={18} color="#475569" />
               </TouchableOpacity>
             </View>
           </View>
@@ -383,9 +521,19 @@ export default function HomeScreen({ mode = 'pdf_to_image', onModeChange }) {
         {/* Action Button */}
         {!convertedResult && (
           <TouchableOpacity
-            style={[styles.btnConvert, isConverting && styles.btnDisabled]}
+            style={[
+              styles.btnConvert,
+              (isConverting ||
+                (isPdfToImage && !selectedPdf) ||
+                (!isPdfToImage && selectedImages.length === 0)) &&
+                styles.btnDisabled
+            ]}
             onPress={handleConvert}
-            disabled={isConverting}
+            disabled={
+              isConverting ||
+              (isPdfToImage && !selectedPdf) ||
+              (!isPdfToImage && selectedImages.length === 0)
+            }
             activeOpacity={0.8}
           >
             {isConverting ? (
@@ -394,7 +542,11 @@ export default function HomeScreen({ mode = 'pdf_to_image', onModeChange }) {
               <>
                 <MaterialIcons name="bolt" size={20} color="#ffffff" />
                 <Text style={styles.btnConvertText}>
-                  {isPdfToImage ? 'Mulai Konversi PDF ke Gambar' : 'Mulai Konversi Gambar ke PDF'}
+                  {isPdfToImage
+                    ? 'Mulai Konversi PDF ke Gambar'
+                    : selectedImages.length > 0
+                    ? `Gabungkan ${selectedImages.length} Gambar Menjadi PDF`
+                    : 'Pilih Gambar Terlebih Dahulu'}
                 </Text>
               </>
             )}
@@ -439,16 +591,16 @@ export default function HomeScreen({ mode = 'pdf_to_image', onModeChange }) {
               <MaterialIcons name="picture-as-pdf" size={24} color="#d97706" />
             </View>
             <View style={styles.modeCardHeaderRow}>
-              <Text style={styles.modeCardTag}>IMG → PDF</Text>
+              <Text style={styles.modeCardTag}>Hingga 20 Gambar → PDF</Text>
               {!isPdfToImage && (
                 <View style={[styles.activeIndicator, { backgroundColor: '#fef3c7', borderColor: '#fde68a' }]}>
                   <Text style={[styles.activeIndicatorText, { color: '#b45309' }]}>Aktif</Text>
                 </View>
               )}
             </View>
-            <Text style={styles.modeCardTitle}>Gambar ke PDF</Text>
+            <Text style={styles.modeCardTitle}>Gambar ke PDF (Maks. 20)</Text>
             <Text style={styles.modeCardDesc}>
-              Kemas foto atau gambar menjadi berkas PDF standar siap cetak.
+              Kemas hingga 20 foto/gambar menjadi 1 berkas PDF rapi siap cetak.
             </Text>
           </TouchableOpacity>
         </View>
@@ -573,10 +725,16 @@ const styles = StyleSheet.create({
     paddingVertical: 3,
     borderRadius: 6
   },
+  modePillAmber: {
+    backgroundColor: '#fef3c7'
+  },
   modePillText: {
     fontSize: 11,
     fontWeight: '700',
     color: '#4338ca'
+  },
+  modePillTextAmber: {
+    color: '#b45309'
   },
   dropzone: {
     borderWidth: 2,
@@ -631,9 +789,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginRight: 10
   },
-  fileIconBoxAmber: {
-    backgroundColor: '#fef3c7'
-  },
   fileTextCol: {
     flex: 1
   },
@@ -655,6 +810,118 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#4f46e5',
     fontWeight: '600'
+  },
+  multiImagesContainer: {
+    backgroundColor: '#f8fafc',
+    borderRadius: 12,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#e2e8f0'
+  },
+  multiHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 12
+  },
+  countBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: '#fef3c7',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#fde68a'
+  },
+  countBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#92400e'
+  },
+  multiActionGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8
+  },
+  btnAddMore: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: '#e0e7ff',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6
+  },
+  btnAddMoreText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#4338ca'
+  },
+  btnClearAll: {
+    paddingHorizontal: 6,
+    paddingVertical: 4
+  },
+  btnClearAllText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#ef4444'
+  },
+  thumbScroll: {
+    flexDirection: 'row'
+  },
+  thumbCard: {
+    width: 90,
+    marginRight: 10,
+    backgroundColor: '#ffffff',
+    borderRadius: 8,
+    padding: 4,
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    position: 'relative'
+  },
+  thumbImage: {
+    width: '100%',
+    height: 80,
+    borderRadius: 6,
+    backgroundColor: '#e2e8f0'
+  },
+  thumbPageBadge: {
+    position: 'absolute',
+    top: 6,
+    left: 6,
+    backgroundColor: 'rgba(15, 23, 42, 0.75)',
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+    borderRadius: 4
+  },
+  thumbPageBadgeText: {
+    fontSize: 9,
+    color: '#ffffff',
+    fontWeight: '700'
+  },
+  thumbDeleteBtn: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
+    backgroundColor: '#ef4444',
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 1,
+    elevation: 2
+  },
+  thumbName: {
+    fontSize: 10,
+    color: '#475569',
+    marginTop: 4,
+    textAlign: 'center'
   },
   formatSection: {
     marginTop: 16
@@ -753,6 +1020,12 @@ const styles = StyleSheet.create({
     color: '#047857',
     marginTop: 2
   },
+  successPageCountText: {
+    fontSize: 11,
+    color: '#059669',
+    fontWeight: '600',
+    marginTop: 2
+  },
   previewImageContainer: {
     backgroundColor: '#ffffff',
     borderRadius: 10,
@@ -776,7 +1049,8 @@ const styles = StyleSheet.create({
   successActionRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8
+    gap: 8,
+    marginTop: 6
   },
   btnShare: {
     flex: 1,
@@ -818,11 +1092,11 @@ const styles = StyleSheet.create({
     elevation: 3
   },
   btnDisabled: {
-    opacity: 0.7
+    opacity: 0.55
   },
   btnConvertText: {
     color: '#ffffff',
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '700'
   },
   modesSection: {

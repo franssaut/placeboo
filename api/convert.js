@@ -263,19 +263,27 @@ export default async function handler(req, res) {
       }
     }
 
-    const { fileName, fileBase64, targetFormat: rawTarget, sourceFormat: rawSource } = body || {};
+    const { fileName, fileBase64, files, images, targetFormat: rawTarget, sourceFormat: rawSource } = body || {};
 
-    if (!fileBase64) {
-      return res.status(400).json({ success: false, error: 'fileBase64 diperlukan untuk memproses konversi.' });
+    const imageList = (images && Array.isArray(images) && images.length > 0)
+      ? images
+      : (files && Array.isArray(files) && files.length > 0)
+      ? files
+      : null;
+
+    if (!fileBase64 && (!imageList || imageList.length === 0)) {
+      return res.status(400).json({ success: false, error: 'Berkas atau fileBase64 diperlukan untuk memproses konversi.' });
     }
 
-    const cleanName = (fileName || 'Dokumen').replace(/\.[^/.]+$/, '');
-    const sourceExt = (rawSource || (fileName && fileName.includes('.') ? fileName.split('.').pop() : '')).toLowerCase();
+    const firstImageName = imageList && imageList[0] ? imageList[0].fileName : '';
+    const cleanName = (fileName || firstImageName || 'Dokumen').replace(/\.[^/.]+$/, '');
+    const sourceExt = (rawSource || (fileName && fileName.includes('.') ? fileName.split('.').pop() : (firstImageName && firstImageName.includes('.') ? firstImageName.split('.').pop() : ''))).toLowerCase();
     const targetFormat = (rawTarget || 'XLSX').toUpperCase();
     let targetExt = targetFormat.toLowerCase();
     let outputFileName = `${cleanName}_converted.${targetExt}`;
 
-    const inputBuffer = Buffer.from(fileBase64, 'base64');
+    const primaryB64 = fileBase64 || (imageList && imageList[0] ? (imageList[0].fileBase64 || imageList[0].base64) : '') || '';
+    const inputBuffer = primaryB64 ? Buffer.from(primaryB64, 'base64') : Buffer.alloc(0);
     let outputBase64 = '';
     let mimeType = 'application/octet-stream';
 
@@ -348,10 +356,74 @@ export default async function handler(req, res) {
     // ==========================================
     else if (targetFormat === 'PDF') {
       mimeType = 'application/pdf';
-      if (sourceExt === 'pdf') {
+
+      if (imageList && imageList.length > 0) {
+        // Multi-image to PDF (compile up to 20 images into multi-page PDF)
+        const validImages = imageList.slice(0, 20);
+        let doc = null;
+
+        for (let i = 0; i < validImages.length; i++) {
+          const item = validImages[i];
+          const b64 = item.fileBase64 || item.base64 || '';
+          if (!b64) continue;
+
+          const itemExt = (item.fileName && item.fileName.includes('.'))
+            ? item.fileName.split('.').pop().toLowerCase()
+            : (item.format || 'jpg').toLowerCase();
+          const imgType = (itemExt === 'png') ? 'PNG' : 'JPEG';
+
+          if (!doc) {
+            doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+          } else {
+            doc.addPage('a4', 'portrait');
+          }
+
+          const pageWidth = 210;
+          const pageHeight = 297;
+          const margin = 10;
+          const maxW = pageWidth - margin * 2;
+          const maxH = pageHeight - margin * 2;
+
+          let renderW = maxW;
+          let renderH = maxH;
+          let posX = margin;
+          let posY = margin;
+
+          try {
+            const props = doc.getImageProperties(b64);
+            if (props && props.width && props.height) {
+              renderW = maxW;
+              renderH = (props.height / props.width) * renderW;
+              if (renderH > maxH) {
+                renderH = maxH;
+                renderW = (props.width / props.height) * renderH;
+              }
+              posX = margin + (maxW - renderW) / 2;
+              posY = margin + (maxH - renderH) / 2;
+            }
+          } catch (propErr) {
+            console.warn('[multi-image getImageProperties Warn]:', propErr?.message);
+          }
+
+          try {
+            doc.addImage(b64, imgType, posX, posY, renderW, renderH, undefined, 'FAST');
+          } catch (addImgErr) {
+            console.warn('[multi-image addImage Error]:', addImgErr?.message);
+          }
+        }
+
+        if (!doc) {
+          doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+          doc.text('Tidak ada gambar yang valid untuk dikonversi.', 15, 20);
+        }
+
+        const dataUri = doc.output('datauristring');
+        outputBase64 = dataUri.split(',')[1] || '';
+        outputFileName = `${cleanName || 'koleksi_gambar'}.pdf`;
+      } else if (sourceExt === 'pdf') {
         outputBase64 = fileBase64;
-      } else if (['png', 'jpg', 'jpeg', 'webp', 'bmp', 'gif'].includes(sourceExt)) {
-        // High-fidelity Image to PDF converter
+      } else if (['png', 'jpg', 'jpeg', 'webp', 'bmp', 'gif', 'image', 'images'].includes(sourceExt)) {
+        // High-fidelity Single Image to PDF converter
         const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
         const pageWidth = 210;
         const pageHeight = 297;
@@ -385,7 +457,6 @@ export default async function handler(req, res) {
           doc.addImage(fileBase64, imgType, posX, posY, renderW, renderH, undefined, 'FAST');
         } catch (addImgErr) {
           console.warn('[addImage Error]:', addImgErr?.message);
-          // Fallback minimal text doc if image format is unsupported
           doc.text(`Placeboo Image to PDF: ${cleanName}`, margin, 20);
         }
 
