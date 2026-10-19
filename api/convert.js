@@ -129,11 +129,62 @@ async function renderPdfToImage(pdfBuffer, targetFormat = 'PNG') {
       });
     }
 
+    let zipBase64 = null;
+    let stitchedBase64 = null;
+
+    if (numPages > 1) {
+      try {
+        const JSZip = (await import('jszip')).default || (await import('jszip'));
+        const zip = new JSZip();
+        for (const p of pages) {
+          zip.file(`halaman_${p.pageNumber}.${ext}`, p.buffer);
+        }
+        const zipBuffer = await zip.generateAsync({ type: 'nodebuffer' });
+        zipBase64 = zipBuffer.toString('base64');
+      } catch (zipErr) {
+        console.warn('[ZIP packaging warning]:', zipErr?.message);
+      }
+
+      try {
+        let totalHeight = 0;
+        let maxWidth = 0;
+        const gap = 16;
+        for (const p of pages) {
+          maxWidth = Math.max(maxWidth, p.width);
+          totalHeight += p.height + gap;
+        }
+        totalHeight = Math.max(totalHeight - gap, 100);
+
+        if (totalHeight <= 16384) {
+          const { loadImage } = await import('@napi-rs/canvas');
+          const stitchedCanvas = createCanvas(maxWidth, totalHeight);
+          const sCtx = stitchedCanvas.getContext('2d');
+          sCtx.fillStyle = '#f1f5f9';
+          sCtx.fillRect(0, 0, maxWidth, totalHeight);
+
+          let curY = 0;
+          for (const p of pages) {
+            const img = await loadImage(p.buffer);
+            const offsetX = Math.floor((maxWidth - p.width) / 2);
+            sCtx.drawImage(img, offsetX, curY);
+            curY += p.height + gap;
+          }
+
+          const stitchedBuf = await stitchedCanvas.encode(encodeFormat, isJpg ? 90 : undefined);
+          stitchedBase64 = Buffer.from(stitchedBuf).toString('base64');
+        }
+      } catch (stitchErr) {
+        console.warn('[Stitch packaging warning]:', stitchErr?.message);
+      }
+    }
+
     return {
       numPages,
       pages,
       primaryBuffer: pages[0].buffer,
       primaryBase64: pages[0].base64,
+      zipBase64,
+      stitchedBase64,
       mimeType,
       ext
     };
@@ -580,6 +631,10 @@ export default async function handler(req, res) {
             targetFormat,
             size: Buffer.from(outputBase64, 'base64').length,
             numPages: rendered.numPages,
+            zipFileName: rendered.zipBase64 ? `${cleanName}_semua_gambar.zip` : null,
+            zipBase64: rendered.zipBase64,
+            stitchedFileName: rendered.stitchedBase64 ? `${cleanName}_gabungan.${rendered.ext}` : null,
+            stitchedBase64: rendered.stitchedBase64,
             pages: rendered.pages.map((p) => ({
               pageNumber: p.pageNumber,
               fileName: `${cleanName}_halaman_${p.pageNumber}.${rendered.ext}`,

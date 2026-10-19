@@ -240,6 +240,29 @@ export default function HomeScreen({ mode = 'pdf_to_image', onModeChange }) {
     }
   };
 
+  const handleShareAllZip = async () => {
+    if (convertedResult?.zipUri) {
+      const success = await shareFileNative(convertedResult.zipUri, 'application/zip');
+      if (!success) {
+        Alert.alert('Informasi', 'Fitur penyimpanan berkas ZIP telah dibuka di perangkat Anda.');
+      }
+    } else {
+      handleShare();
+    }
+  };
+
+  const handleShareStitched = async () => {
+    if (convertedResult?.stitchedUri) {
+      const mime =
+        convertedResult.mimeType ||
+        (targetFormat === 'JPG' || targetFormat === 'JPEG' ? 'image/jpeg' : 'image/png');
+      const success = await shareFileNative(convertedResult.stitchedUri, mime);
+      if (!success) {
+        Alert.alert('Informasi', 'Fitur penyimpanan gambar utuh telah dibuka di perangkat Anda.');
+      }
+    }
+  };
+
   const handleReset = () => {
     setSelectedPdf(null);
     setSelectedImages([]);
@@ -598,19 +621,67 @@ export default function HomeScreen({ mode = 'pdf_to_image', onModeChange }) {
               </View>
             )}
 
-            <View style={styles.successActionRow}>
-              <TouchableOpacity style={styles.btnShare} onPress={handleShare}>
-                <MaterialIcons name="share" size={18} color="#ffffff" />
-                <Text style={styles.btnShareText}>
-                  {isPdfToImage && convertedResult.pages && convertedResult.pages.length > 1
-                    ? `Buka Halaman ${activePdfPageIdx + 1}`
-                    : 'Buka / Bagikan Berkas'}
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.btnResetSmall} onPress={handleReset}>
-                <MaterialIcons name="refresh" size={18} color="#475569" />
-              </TouchableOpacity>
-            </View>
+            {isPdfToImage && convertedResult.pages && convertedResult.pages.length > 1 ? (
+              <View style={styles.multiShareContainer}>
+                {convertedResult.zipUri && (
+                  <TouchableOpacity
+                    style={styles.btnShareAllZip}
+                    onPress={handleShareAllZip}
+                    activeOpacity={0.8}
+                  >
+                    <MaterialIcons name="archive" size={22} color="#ffffff" />
+                    <View style={styles.btnShareAllZipContent}>
+                      <Text style={styles.btnShareAllZipTitle}>
+                        Bagikan Langsung Semua Gambar ({convertedResult.pages.length} Halaman ZIP)
+                      </Text>
+                      <Text style={styles.btnShareAllZipSub}>
+                        Kirim sekaligus ke WhatsApp, Telegram, Drive, atau simpan ke File
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                )}
+
+                <View style={styles.secondaryShareRow}>
+                  {convertedResult.stitchedUri && (
+                    <TouchableOpacity
+                      style={styles.btnShareSecondary}
+                      onPress={handleShareStitched}
+                      activeOpacity={0.8}
+                    >
+                      <MaterialIcons name="photo-size-select-actual" size={16} color="#4338ca" />
+                      <Text style={styles.btnShareSecondaryText}>1 Gambar Utuh</Text>
+                    </TouchableOpacity>
+                  )}
+
+                  <TouchableOpacity
+                    style={styles.btnShareSecondary}
+                    onPress={handleShare}
+                    activeOpacity={0.8}
+                  >
+                    <MaterialIcons name="image" size={16} color="#4338ca" />
+                    <Text style={styles.btnShareSecondaryText}>Hal. {activePdfPageIdx + 1} Saja</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={styles.btnResetSmall}
+                    onPress={handleReset}
+                    activeOpacity={0.8}
+                  >
+                    <MaterialIcons name="refresh" size={18} color="#475569" />
+                  </TouchableOpacity>
+                </View>
+              </View>
+            ) : (
+              <View style={styles.successActionRow}>
+                <TouchableOpacity style={styles.btnShare} onPress={handleShare}>
+                  <MaterialIcons name="share" size={18} color="#ffffff" />
+                  <Text style={styles.btnShareText}>Buka / Bagikan Berkas</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.btnResetSmall} onPress={handleReset}>
+                  <MaterialIcons name="refresh" size={18} color="#475569" />
+                </TouchableOpacity>
+              </View>
+            )}
           </View>
         )}
 
@@ -1225,6 +1296,59 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center'
+  },
+  multiShareContainer: {
+    gap: 8,
+    marginTop: 6
+  },
+  btnShareAllZip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: '#059669',
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: 10,
+    shadowColor: '#059669',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 3
+  },
+  btnShareAllZipContent: {
+    flex: 1
+  },
+  btnShareAllZipTitle: {
+    color: '#ffffff',
+    fontSize: 13,
+    fontWeight: '700'
+  },
+  btnShareAllZipSub: {
+    color: '#d1fae5',
+    fontSize: 10,
+    marginTop: 2
+  },
+  secondaryShareRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8
+  },
+  btnShareSecondary: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
+    backgroundColor: '#eef2ff',
+    borderWidth: 1,
+    borderColor: '#c7d2fe',
+    paddingVertical: 9,
+    borderRadius: 8
+  },
+  btnShareSecondaryText: {
+    color: '#4338ca',
+    fontSize: 12,
+    fontWeight: '700'
   },
   btnConvert: {
     flexDirection: 'row',

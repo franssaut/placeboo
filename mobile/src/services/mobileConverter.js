@@ -324,11 +324,27 @@ export async function convertDocumentMobile(filesInput, targetFormat = 'XLSX', o
               }
             }
 
+            let zipUri = null;
+            if (data.zipBase64 && data.zipFileName) {
+              zipUri = `${baseDir}${data.zipFileName}`;
+              await writeBase64File(zipUri, data.zipBase64);
+            }
+
+            let stitchedUri = null;
+            if (data.stitchedBase64 && data.stitchedFileName) {
+              stitchedUri = `${baseDir}${data.stitchedFileName}`;
+              await writeBase64File(stitchedUri, data.stitchedBase64);
+            }
+
             console.log(`[API Conversion Success via ${endpoint}]`);
             onProgress(100);
             return {
               fileName: actualFileName,
               uri: actualOutputUri,
+              zipUri,
+              zipFileName: data.zipFileName,
+              stitchedUri,
+              stitchedFileName: data.stitchedFileName,
               targetFormat: data.targetFormat || targetFormat.toUpperCase(),
               mimeType: data.mimeType || (targetFormat.toUpperCase() === 'PNG' ? 'image/png' : targetFormat.toUpperCase() === 'PDF' ? 'application/pdf' : 'image/jpeg'),
               sourceEngine: 'Website Cloud API',
@@ -443,12 +459,21 @@ export async function shareFileNative(fileUri, mimeType = 'application/octet-str
   try {
     const isAvailable = await Sharing.isAvailableAsync();
     if (isAvailable) {
-      const isPdf = mimeType.includes('pdf');
-      const isJpeg = mimeType.includes('jpeg') || mimeType.includes('jpg');
-      const uti = isPdf ? 'com.adobe.pdf' : (isJpeg ? 'public.jpeg' : 'public.png');
+      const isPdf = mimeType.includes('pdf') || fileUri.endsWith('.pdf');
+      const isJpeg = mimeType.includes('jpeg') || mimeType.includes('jpg') || fileUri.endsWith('.jpg') || fileUri.endsWith('.jpeg');
+      const isZip = mimeType.includes('zip') || fileUri.endsWith('.zip');
+      const uti = isPdf
+        ? 'com.adobe.pdf'
+        : isZip
+        ? 'public.zip-archive'
+        : isJpeg
+        ? 'public.jpeg'
+        : 'public.png';
+      const finalMime = isZip ? 'application/zip' : mimeType;
+
       await Sharing.shareAsync(fileUri, {
         dialogTitle: 'Buka atau Simpan Dokumen Terkonversi',
-        mimeType,
+        mimeType: finalMime,
         UTI: uti
       });
       return true;
