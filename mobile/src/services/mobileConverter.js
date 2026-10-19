@@ -448,7 +448,11 @@ export async function convertDocumentMobile(filesInput, targetFormat = 'XLSX', o
 /**
  * Shares or saves the converted file natively via iOS/Android Share Sheet
  */
-export async function shareFileNative(fileUri, mimeType = 'application/octet-stream') {
+export async function shareFileNative(
+  fileUri,
+  mimeType = 'application/octet-stream',
+  dialogTitle = 'Buka atau Simpan Gambar / Dokumen Terkonversi'
+) {
   try {
     const isAvailable = await Sharing.isAvailableAsync();
     if (isAvailable) {
@@ -461,7 +465,7 @@ export async function shareFileNative(fileUri, mimeType = 'application/octet-str
         : 'public.png';
 
       await Sharing.shareAsync(fileUri, {
-        dialogTitle: 'Buka atau Simpan Gambar / Dokumen Terkonversi',
+        dialogTitle,
         mimeType,
         UTI: uti
       });
