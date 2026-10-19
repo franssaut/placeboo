@@ -2,7 +2,6 @@ import React from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
-import ProModal from './components/ProModal';
 import Toast from './components/Toast';
 import Home from './pages/Home';
 import Catalog from './pages/Catalog';
@@ -19,7 +18,6 @@ export default function App() {
         </Routes>
       </div>
       <Footer />
-      <ProModal />
       <Toast />
     </div>
   );

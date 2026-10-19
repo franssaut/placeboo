@@ -132,7 +132,6 @@ export const AppProvider = ({ children }) => {
   });
   const [activePreview, setActivePreview] = useState(null);
   const [toast, setToast] = useState({ message: '', type: 'success', visible: false });
-  const [isProModalOpen, setIsProModalOpen] = useState(false);
 
   // Sync to local storage
   useEffect(() => {
@@ -181,9 +180,6 @@ export const AppProvider = ({ children }) => {
       setToast(prev => ({ ...prev, visible: false }));
     }, 3200);
   };
-
-  const openProModal = () => setIsProModalOpen(true);
-  const closeProModal = () => setIsProModalOpen(false);
 
   const formatBytes = (bytes) => {
     if (!bytes || bytes === 0) return '0 Bytes';
@@ -516,9 +512,6 @@ export const AppProvider = ({ children }) => {
         setActivePreview,
         toast,
         showToast,
-        isProModalOpen,
-        openProModal,
-        closeProModal,
         addJobs,
         updateJobProgress,
         deleteJob,

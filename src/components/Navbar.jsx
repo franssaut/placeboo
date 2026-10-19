@@ -1,9 +1,7 @@
 import React, { useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { useApp } from '../context/AppContext';
 
 export default function Navbar() {
-  const { openProModal, showToast } = useApp();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const navigate = useNavigate();
@@ -43,7 +41,6 @@ export default function Navbar() {
         </div>
 
         <div className="flex items-center gap-space-md flex-shrink-0">
-
           <div className="relative hidden lg:block w-52">
             <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-[18px]">
               search
@@ -57,14 +54,6 @@ export default function Navbar() {
               className="w-full h-9 pl-9 pr-3 rounded-lg bg-surface-container-low text-on-surface placeholder:text-outline font-body-sm text-body-sm focus:outline-none focus:bg-surface-container-lowest focus:ring-2 focus:ring-primary/20 transition-all"
             />
           </div>
-
-          <button
-            onClick={openProModal}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary-container text-on-primary font-label-sm text-label-sm shadow-[0_2px_4px_rgba(79,70,229,0.2)] hover:bg-primary transition-all active:scale-[0.98]"
-          >
-            <span className="material-symbols-outlined text-[16px]">bolt</span>
-            Peningkatan Pro
-          </button>
 
           {/* Mobile hamburger button */}
           <button
@@ -134,17 +123,7 @@ export default function Navbar() {
               </nav>
             </div>
 
-            <div className="pt-4 border-t border-outline-variant/20 space-y-3">
-              <button
-                onClick={() => {
-                  setMobileMenuOpen(false);
-                  openProModal();
-                }}
-                className="w-full py-2.5 rounded-lg bg-primary text-on-primary text-center font-label-md text-sm font-semibold flex items-center justify-center gap-1.5 shadow-md"
-              >
-                <span className="material-symbols-outlined text-[18px]">bolt</span>
-                Peningkatan Pro
-              </button>
+            <div className="pt-4 border-t border-outline-variant/20 space-y-2">
               <p className="text-xs text-center text-outline">
                 Enkripsi TLS 1.3 • Zero Data Retention
               </p>
