@@ -6,7 +6,8 @@ import {
   TouchableOpacity,
   ScrollView,
   Alert,
-  ActivityIndicator
+  ActivityIndicator,
+  Image
 } from 'react-native';
 import * as DocumentPicker from 'expo-document-picker';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -338,15 +339,35 @@ export default function HomeScreen({ mode = 'pdf_to_image', onModeChange }) {
         {/* Converted Result Banner */}
         {convertedResult && (
           <View style={styles.successBox}>
-            <View style={styles.successIconBox}>
-              <MaterialIcons name="check-circle" size={26} color="#10b981" />
+            <View style={styles.successHeaderRow}>
+              <View style={styles.successIconBox}>
+                <MaterialIcons name="check-circle" size={26} color="#10b981" />
+              </View>
+              <View style={styles.successTextCol}>
+                <Text style={styles.successTitle}>Konversi Berhasil!</Text>
+                <Text style={styles.successFileName} numberOfLines={1}>
+                  {convertedResult.fileName}
+                </Text>
+              </View>
             </View>
-            <View style={styles.successTextCol}>
-              <Text style={styles.successTitle}>Konversi Berhasil!</Text>
-              <Text style={styles.successFileName} numberOfLines={1}>
-                {convertedResult.fileName}
-              </Text>
-            </View>
+
+            {/* Live Image Preview for PDF to Image */}
+            {Boolean(
+              convertedResult.uri &&
+                (convertedResult.targetFormat === 'PNG' ||
+                  convertedResult.targetFormat === 'JPG' ||
+                  convertedResult.mimeType?.startsWith('image/'))
+            ) && (
+              <View style={styles.previewImageContainer}>
+                <Text style={styles.previewLabel}>Pratinjau Hasil Dokumen Gambar:</Text>
+                <Image
+                  source={{ uri: convertedResult.uri }}
+                  style={styles.previewImage}
+                  resizeMode="contain"
+                />
+              </View>
+            )}
+
             <View style={styles.successActionRow}>
               <TouchableOpacity style={styles.btnShare} onPress={handleShare}>
                 <MaterialIcons name="share" size={18} color="#ffffff" />
@@ -709,11 +730,18 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#a7f3d0'
   },
+  successHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 8
+  },
   successIconBox: {
-    marginBottom: 6
+    alignItems: 'center',
+    justifyContent: 'center'
   },
   successTextCol: {
-    marginBottom: 10
+    flex: 1
   },
   successTitle: {
     fontSize: 14,
@@ -724,6 +752,26 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#047857',
     marginTop: 2
+  },
+  previewImageContainer: {
+    backgroundColor: '#ffffff',
+    borderRadius: 10,
+    padding: 10,
+    marginVertical: 10,
+    borderWidth: 1,
+    borderColor: '#a7f3d0'
+  },
+  previewLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#065f46',
+    marginBottom: 6
+  },
+  previewImage: {
+    width: '100%',
+    height: 280,
+    borderRadius: 8,
+    backgroundColor: '#ffffff'
   },
   successActionRow: {
     flexDirection: 'row',

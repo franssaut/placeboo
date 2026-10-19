@@ -65,24 +65,90 @@ function calculateAutoFitCols(rows) {
   return colWidths;
 }
 
-// Extract embedded JPEG image from PDF if present
-function extractJpegFromPdf(buffer) {
-  let start = -1;
-  for (let i = 0; i < buffer.length - 3; i++) {
-    if (buffer[i] === 0xff && buffer[i + 1] === 0xd8 && buffer[i + 2] === 0xff) {
-      start = i;
-      break;
+// Real PDF to Image Renderer using pdfjs-dist and @napi-rs/canvas
+async function renderPdfToImage(pdfBuffer, targetFormat = 'PNG') {
+  try {
+    const { createCanvas } = await import('@napi-rs/canvas');
+    const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
+
+    const loadingTask = pdfjs.getDocument({
+      data: new Uint8Array(pdfBuffer),
+      standardFontDataUrl: 'https://unpkg.com/pdfjs-dist@6.4.299/standard_fonts/'
+    });
+
+    const pdfDoc = await loadingTask.promise;
+    const numPages = pdfDoc.numPages;
+
+    if (numPages === 0) {
+      return null;
     }
-  }
-  if (start !== -1) {
-    for (let j = buffer.length - 2; j > start; j--) {
-      if (buffer[j] === 0xff && buffer[j + 1] === 0xd9) {
-        const jpeg = buffer.subarray(start, j + 2);
-        if (jpeg.length > 2048) return jpeg; // Minimum 2KB to be a real image
-      }
+
+    const scale = 1.8;
+    const isJpg = targetFormat.toUpperCase() === 'JPG' || targetFormat.toUpperCase() === 'JPEG';
+    const encodeFormat = isJpg ? 'jpeg' : 'png';
+
+    // Single page PDF
+    if (numPages === 1) {
+      const page = await pdfDoc.getPage(1);
+      const viewport = page.getViewport({ scale });
+      const canvas = createCanvas(Math.floor(viewport.width), Math.floor(viewport.height));
+      const ctx = canvas.getContext('2d');
+
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      await page.render({ canvasContext: ctx, viewport }).promise;
+      const imgBuffer = await canvas.encode(encodeFormat, isJpg ? 90 : undefined);
+      return {
+        buffer: imgBuffer,
+        mimeType: isJpg ? 'image/jpeg' : 'image/png',
+        ext: isJpg ? 'jpg' : 'png'
+      };
     }
+
+    // Multi-page PDF: render pages stitched vertically
+    const pageCanvases = [];
+    let totalHeight = 0;
+    let maxWidth = 0;
+    const gap = 16;
+
+    for (let p = 1; p <= numPages; p++) {
+      const page = await pdfDoc.getPage(p);
+      const viewport = page.getViewport({ scale });
+      const c = createCanvas(Math.floor(viewport.width), Math.floor(viewport.height));
+      const ctx = c.getContext('2d');
+
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, c.width, c.height);
+
+      await page.render({ canvasContext: ctx, viewport }).promise;
+      pageCanvases.push(c);
+      maxWidth = Math.max(maxWidth, c.width);
+      totalHeight += c.height + (p < numPages ? gap : 0);
+    }
+
+    const stitched = createCanvas(maxWidth, totalHeight);
+    const sCtx = stitched.getContext('2d');
+    sCtx.fillStyle = '#f1f5f9';
+    sCtx.fillRect(0, 0, maxWidth, totalHeight);
+
+    let curY = 0;
+    for (const pc of pageCanvases) {
+      const offsetX = Math.floor((maxWidth - pc.width) / 2);
+      sCtx.drawImage(pc, offsetX, curY);
+      curY += pc.height + gap;
+    }
+
+    const imgBuffer = await stitched.encode(encodeFormat, isJpg ? 90 : undefined);
+    return {
+      buffer: imgBuffer,
+      mimeType: isJpg ? 'image/jpeg' : 'image/png',
+      ext: isJpg ? 'jpg' : 'png'
+    };
+  } catch (err) {
+    console.error('[renderPdfToImage Error]:', err?.message);
+    return null;
   }
-  return null;
 }
 
 // Generate high-resolution 800x1100 document image
@@ -437,20 +503,19 @@ export default async function handler(req, res) {
         mimeType = targetFormat === 'PNG' ? 'image/png' : 'image/jpeg';
         outputBase64 = fileBase64;
       } else if (sourceExt === 'pdf') {
-        // Try extracting embedded high-res JPEG first (e.g., scanned doc / receipt)
-        const extractedJpeg = extractJpegFromPdf(inputBuffer);
-        if (extractedJpeg) {
-          mimeType = 'image/jpeg';
-          outputFileName = `${cleanName}_converted.jpg`;
-          outputBase64 = Buffer.from(extractedJpeg).toString('base64');
+        // Render real PDF document pages into high-resolution image
+        const rendered = await renderPdfToImage(inputBuffer, targetFormat);
+        if (rendered && rendered.buffer) {
+          mimeType = rendered.mimeType;
+          outputFileName = `${cleanName}_converted.${rendered.ext}`;
+          outputBase64 = Buffer.from(rendered.buffer).toString('base64');
         } else {
-          // Generate full-resolution 800x1100 document page image
-          mimeType = 'image/png';
-          outputFileName = `${cleanName}_converted.png`;
+          mimeType = targetFormat === 'PNG' ? 'image/png' : 'image/jpeg';
+          outputFileName = `${cleanName}_converted.${targetFormat.toLowerCase()}`;
           outputBase64 = generateHighResDocumentPng(cleanName, sourceExt);
         }
       } else {
-        // Generate high-resolution 800x1100 document image
+        // Generate high-resolution document image
         mimeType = 'image/png';
         outputFileName = `${cleanName}_converted.png`;
         outputBase64 = generateHighResDocumentPng(cleanName, sourceExt);

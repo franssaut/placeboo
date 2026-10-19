@@ -398,10 +398,13 @@ export async function shareFileNative(fileUri, mimeType = 'application/octet-str
   try {
     const isAvailable = await Sharing.isAvailableAsync();
     if (isAvailable) {
+      const isPdf = mimeType.includes('pdf');
+      const isJpeg = mimeType.includes('jpeg') || mimeType.includes('jpg');
+      const uti = isPdf ? 'com.adobe.pdf' : (isJpeg ? 'public.jpeg' : 'public.png');
       await Sharing.shareAsync(fileUri, {
         dialogTitle: 'Buka atau Simpan Dokumen Terkonversi',
         mimeType,
-        UTI: mimeType
+        UTI: uti
       });
       return true;
     } else {
