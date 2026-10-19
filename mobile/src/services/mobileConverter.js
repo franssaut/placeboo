@@ -201,13 +201,13 @@ export async function convertDocumentMobile(file, targetFormat = 'XLSX', onProgr
     if (fileBase64 && fileBase64.length > 0) {
       onProgress(40);
 
-      // Try production website API first, then local dev URL
-      const endpoints = [PLACEBOO_API_URL, PLACEBOO_LOCAL_API_URL];
+      // Try local network API first (fastest on Wi-Fi), then cloud website API
+      const endpoints = [PLACEBOO_LOCAL_API_URL, PLACEBOO_API_URL];
 
       for (const endpoint of endpoints) {
         try {
           const controller = new AbortController();
-          const timer = setTimeout(() => controller.abort(), 18000); // 18s timeout
+          const timer = setTimeout(() => controller.abort(), 6000); // 6s fast timeout
 
           const resp = await fetch(endpoint, {
             method: 'POST',
