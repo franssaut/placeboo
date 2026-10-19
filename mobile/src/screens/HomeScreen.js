@@ -15,7 +15,8 @@ import {
   MAX_FILE_SIZE,
   formatBytes,
   convertDocumentMobile,
-  shareFileNative
+  shareFileNative,
+  saveImagesToGallery
 } from '../services/mobileConverter';
 
 const MAX_IMAGES_LIMIT = 20;
@@ -29,6 +30,7 @@ export default function HomeScreen({ mode = 'pdf_to_image', onModeChange }) {
   const [progress, setProgress] = useState(0);
   const [convertedResult, setConvertedResult] = useState(null);
   const [activePdfPageIdx, setActivePdfPageIdx] = useState(0);
+  const [isSavingGallery, setIsSavingGallery] = useState(false);
 
   // Sync mode from parent if provided
   useEffect(() => {
@@ -240,14 +242,33 @@ export default function HomeScreen({ mode = 'pdf_to_image', onModeChange }) {
     }
   };
 
-  const handleShareAllZip = async () => {
-    if (convertedResult?.zipUri) {
-      const success = await shareFileNative(convertedResult.zipUri, 'application/zip');
-      if (!success) {
-        Alert.alert('Informasi', 'Fitur penyimpanan berkas ZIP telah dibuka di perangkat Anda.');
+  const handleSaveAllToGallery = async () => {
+    if (!convertedResult?.pages || convertedResult.pages.length === 0) {
+      if (convertedResult?.uri) {
+        setIsSavingGallery(true);
+        const res = await saveImagesToGallery([convertedResult.uri]);
+        setIsSavingGallery(false);
+        if (res.success) {
+          Alert.alert('Tersimpan di Galeri', 'Gambar berhasil disimpan ke Galeri Foto perangkat Anda!');
+        } else {
+          Alert.alert('Gagal Menyimpan', res.error || 'Gagal menyimpan ke galeri.');
+        }
       }
+      return;
+    }
+
+    setIsSavingGallery(true);
+    const uris = convertedResult.pages.map((p) => p.uri);
+    const res = await saveImagesToGallery(uris);
+    setIsSavingGallery(false);
+
+    if (res.success) {
+      Alert.alert(
+        'Berhasil Disimpan ke Galeri!',
+        `Semua ${res.count} gambar halaman berhasil disimpan langsung ke aplikasi Galeri / Foto ponsel Anda.`
+      );
     } else {
-      handleShare();
+      Alert.alert('Gagal Menyimpan ke Galeri', res.error || 'Gagal menyimpan ke galeri.');
     }
   };
 
@@ -623,43 +644,60 @@ export default function HomeScreen({ mode = 'pdf_to_image', onModeChange }) {
 
             {isPdfToImage && convertedResult.pages && convertedResult.pages.length > 1 ? (
               <View style={styles.multiShareContainer}>
-                {convertedResult.zipUri && (
+                {/* 1. Primary Share Action: 1 Gambar Utuh (Semua Halaman) */}
+                {convertedResult.stitchedUri && (
                   <TouchableOpacity
-                    style={styles.btnShareAllZip}
-                    onPress={handleShareAllZip}
+                    style={styles.btnShareAllImage}
+                    onPress={handleShareStitched}
                     activeOpacity={0.8}
                   >
-                    <MaterialIcons name="archive" size={22} color="#ffffff" />
-                    <View style={styles.btnShareAllZipContent}>
-                      <Text style={styles.btnShareAllZipTitle}>
-                        Bagikan Langsung Semua Gambar ({convertedResult.pages.length} Halaman ZIP)
+                    <MaterialIcons name="photo-library" size={22} color="#ffffff" />
+                    <View style={styles.btnShareAllImageContent}>
+                      <Text style={styles.btnShareAllImageTitle}>
+                        Bagikan Semua Halaman (1 Gambar Utuh)
                       </Text>
-                      <Text style={styles.btnShareAllZipSub}>
-                        Kirim sekaligus ke WhatsApp, Telegram, Drive, atau simpan ke File
+                      <Text style={styles.btnShareAllImageSub}>
+                        Kirim gambar bersambung ke WhatsApp/Telegram (Bisa langsung dibuka di chat)
                       </Text>
                     </View>
                   </TouchableOpacity>
                 )}
 
-                <View style={styles.secondaryShareRow}>
-                  {convertedResult.stitchedUri && (
-                    <TouchableOpacity
-                      style={styles.btnShareSecondary}
-                      onPress={handleShareStitched}
-                      activeOpacity={0.8}
-                    >
-                      <MaterialIcons name="photo-size-select-actual" size={16} color="#4338ca" />
-                      <Text style={styles.btnShareSecondaryText}>1 Gambar Utuh</Text>
-                    </TouchableOpacity>
+                {/* 2. Direct Gallery Save Action: Simpan Semua Lembar Gambar ke Galeri */}
+                <TouchableOpacity
+                  style={styles.btnSaveGallery}
+                  onPress={handleSaveAllToGallery}
+                  disabled={isSavingGallery}
+                  activeOpacity={0.8}
+                >
+                  {isSavingGallery ? (
+                    <ActivityIndicator size="small" color="#0f172a" />
+                  ) : (
+                    <MaterialIcons name="save-alt" size={20} color="#0f172a" />
                   )}
+                  <View style={styles.btnSaveGalleryContent}>
+                    <Text style={styles.btnSaveGalleryTitle}>
+                      {isSavingGallery
+                        ? 'Menyimpan ke Galeri...'
+                        : `Simpan Semua ke Galeri (${convertedResult.pages.length} Gambar)`}
+                    </Text>
+                    <Text style={styles.btnSaveGallerySub}>
+                      Simpan tiap lembar foto langsung ke album galeri ponsel
+                    </Text>
+                  </View>
+                </TouchableOpacity>
 
+                {/* 3. Row: Share current preview page & Reset */}
+                <View style={styles.secondaryShareRow}>
                   <TouchableOpacity
                     style={styles.btnShareSecondary}
                     onPress={handleShare}
                     activeOpacity={0.8}
                   >
-                    <MaterialIcons name="image" size={16} color="#4338ca" />
-                    <Text style={styles.btnShareSecondaryText}>Hal. {activePdfPageIdx + 1} Saja</Text>
+                    <MaterialIcons name="share" size={16} color="#4338ca" />
+                    <Text style={styles.btnShareSecondaryText}>
+                      Bagikan Halaman {activePdfPageIdx + 1} Saja
+                    </Text>
                   </TouchableOpacity>
 
                   <TouchableOpacity
@@ -677,6 +715,19 @@ export default function HomeScreen({ mode = 'pdf_to_image', onModeChange }) {
                   <MaterialIcons name="share" size={18} color="#ffffff" />
                   <Text style={styles.btnShareText}>Buka / Bagikan Berkas</Text>
                 </TouchableOpacity>
+                {isPdfToImage && (
+                  <TouchableOpacity
+                    style={styles.btnSaveGallerySingle}
+                    onPress={handleSaveAllToGallery}
+                    disabled={isSavingGallery}
+                  >
+                    {isSavingGallery ? (
+                      <ActivityIndicator size="small" color="#0f172a" />
+                    ) : (
+                      <MaterialIcons name="save-alt" size={18} color="#0f172a" />
+                    )}
+                  </TouchableOpacity>
+                )}
                 <TouchableOpacity style={styles.btnResetSmall} onPress={handleReset}>
                   <MaterialIcons name="refresh" size={18} color="#475569" />
                 </TouchableOpacity>
@@ -1301,32 +1352,65 @@ const styles = StyleSheet.create({
     gap: 8,
     marginTop: 6
   },
-  btnShareAllZip: {
+  btnShareAllImage: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-    backgroundColor: '#059669',
+    gap: 12,
+    backgroundColor: '#4f46e5',
     paddingVertical: 12,
     paddingHorizontal: 14,
     borderRadius: 10,
-    shadowColor: '#059669',
+    shadowColor: '#4f46e5',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,
     shadowRadius: 4,
     elevation: 3
   },
-  btnShareAllZipContent: {
+  btnShareAllImageContent: {
     flex: 1
   },
-  btnShareAllZipTitle: {
+  btnShareAllImageTitle: {
     color: '#ffffff',
     fontSize: 13,
     fontWeight: '700'
   },
-  btnShareAllZipSub: {
-    color: '#d1fae5',
+  btnShareAllImageSub: {
+    color: '#e0e7ff',
     fontSize: 10,
     marginTop: 2
+  },
+  btnSaveGallery: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: '#f8fafc',
+    borderWidth: 1.5,
+    borderColor: '#cbd5e1',
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 10
+  },
+  btnSaveGalleryContent: {
+    flex: 1
+  },
+  btnSaveGalleryTitle: {
+    color: '#0f172a',
+    fontSize: 12,
+    fontWeight: '700'
+  },
+  btnSaveGallerySub: {
+    color: '#64748b',
+    fontSize: 10,
+    marginTop: 1
+  },
+  btnSaveGallerySingle: {
+    backgroundColor: '#f8fafc',
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    padding: 10,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center'
   },
   secondaryShareRow: {
     flexDirection: 'row',

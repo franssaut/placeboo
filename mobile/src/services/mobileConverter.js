@@ -1,6 +1,7 @@
 import * as FileSystemLegacy from 'expo-file-system/legacy';
 import * as FileSystemNew from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
+import * as MediaLibrary from 'expo-media-library';
 import * as XLSX from 'xlsx';
 import { DEFAULT_DOCUMENT_PNG_BASE64 } from './defaultPngBase64';
 
@@ -324,12 +325,6 @@ export async function convertDocumentMobile(filesInput, targetFormat = 'XLSX', o
               }
             }
 
-            let zipUri = null;
-            if (data.zipBase64 && data.zipFileName) {
-              zipUri = `${baseDir}${data.zipFileName}`;
-              await writeBase64File(zipUri, data.zipBase64);
-            }
-
             let stitchedUri = null;
             if (data.stitchedBase64 && data.stitchedFileName) {
               stitchedUri = `${baseDir}${data.stitchedFileName}`;
@@ -341,8 +336,6 @@ export async function convertDocumentMobile(filesInput, targetFormat = 'XLSX', o
             return {
               fileName: actualFileName,
               uri: actualOutputUri,
-              zipUri,
-              zipFileName: data.zipFileName,
               stitchedUri,
               stitchedFileName: data.stitchedFileName,
               targetFormat: data.targetFormat || targetFormat.toUpperCase(),
@@ -453,6 +446,36 @@ export async function convertDocumentMobile(filesInput, targetFormat = 'XLSX', o
 }
 
 /**
+ * Saves one or multiple image URIs directly into the user's Gallery / Photos
+ */
+export async function saveImagesToGallery(uris) {
+  try {
+    const { status } = await MediaLibrary.requestPermissionsAsync();
+    if (status !== 'granted') {
+      return {
+        success: false,
+        error: 'Izin akses galeri tidak diberikan. Silakan aktifkan izin galeri pada pengaturan ponsel.'
+      };
+    }
+
+    const uriList = Array.isArray(uris) ? uris : [uris];
+    let savedCount = 0;
+
+    for (const u of uriList) {
+      if (u) {
+        await MediaLibrary.saveToLibraryAsync(u);
+        savedCount++;
+      }
+    }
+
+    return { success: true, count: savedCount };
+  } catch (err) {
+    console.error('[saveImagesToGallery Error]:', err);
+    return { success: false, error: err?.message || 'Gagal menyimpan berkas ke galeri.' };
+  }
+}
+
+/**
  * Shares or saves the converted file natively via iOS/Android Share Sheet
  */
 export async function shareFileNative(fileUri, mimeType = 'application/octet-stream') {
@@ -461,19 +484,15 @@ export async function shareFileNative(fileUri, mimeType = 'application/octet-str
     if (isAvailable) {
       const isPdf = mimeType.includes('pdf') || fileUri.endsWith('.pdf');
       const isJpeg = mimeType.includes('jpeg') || mimeType.includes('jpg') || fileUri.endsWith('.jpg') || fileUri.endsWith('.jpeg');
-      const isZip = mimeType.includes('zip') || fileUri.endsWith('.zip');
       const uti = isPdf
         ? 'com.adobe.pdf'
-        : isZip
-        ? 'public.zip-archive'
         : isJpeg
         ? 'public.jpeg'
         : 'public.png';
-      const finalMime = isZip ? 'application/zip' : mimeType;
 
       await Sharing.shareAsync(fileUri, {
-        dialogTitle: 'Buka atau Simpan Dokumen Terkonversi',
-        mimeType: finalMime,
+        dialogTitle: 'Buka atau Simpan Gambar / Dokumen Terkonversi',
+        mimeType,
         UTI: uti
       });
       return true;
