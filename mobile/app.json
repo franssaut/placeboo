@@ -16,6 +16,7 @@
     },
     "android": {
       "package": "com.placeboo.converter",
+      "versionCode": 1,
       "adaptiveIcon": {
         "backgroundColor": "#4F46E5",
         "foregroundImage": "./assets/android-icon-foreground.png",
