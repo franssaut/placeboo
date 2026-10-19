@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   StyleSheet,
   Text,
@@ -34,6 +34,9 @@ export default function HomeScreen({ mode = 'pdf_to_image', onModeChange }) {
   const [activePdfPageIdx, setActivePdfPageIdx] = useState(0);
   const [isSavingStorage, setIsSavingStorage] = useState(false);
   const [selectedPageIndices, setSelectedPageIndices] = useState([]);
+  const [isBatchSharing, setIsBatchSharing] = useState(false);
+  const [batchShareProgress, setBatchShareProgress] = useState({ current: 0, total: 0 });
+  const abortBatchShareRef = useRef(false);
 
   // Automatically select all pages when conversion completes
   useEffect(() => {
@@ -294,7 +297,7 @@ export default function HomeScreen({ mode = 'pdf_to_image', onModeChange }) {
     if (selectedList.length === 0) {
       Alert.alert(
         'Pilih Halaman Terlebih Dahulu',
-        'Silakan centang minimal 1 lembar halaman pada daftar di bawah untuk dikirim ke WhatsApp.'
+        'Silakan centang minimal 1 lembar halaman pada daftar di atas untuk dikirim ke WhatsApp.'
       );
       return;
     }
@@ -303,39 +306,85 @@ export default function HomeScreen({ mode = 'pdf_to_image', onModeChange }) {
       convertedResult.mimeType ||
       (targetFormat === 'PNG' ? 'image/png' : 'image/jpeg');
 
-    for (let i = 0; i < selectedList.length; i++) {
-      const page = selectedList[i];
-      const pageNum = page.pageNumber || i + 1;
-      const title = `Kirim Halaman ${pageNum} (${i + 1}/${selectedList.length} Terpilih) ke WhatsApp`;
+    abortBatchShareRef.current = false;
+    setIsBatchSharing(true);
 
-      const success = await shareFileNative(page.uri, mime, title);
-      if (!success) {
-        break;
-      }
+    try {
+      for (let i = 0; i < selectedList.length; i++) {
+        if (abortBatchShareRef.current) break;
 
-      if (i < selectedList.length - 1) {
-        const nextNum = selectedList[i + 1].pageNumber || i + 2;
-        const proceed = await new Promise((resolve) => {
-          Alert.alert(
-            `Halaman ${pageNum} Terkirim`,
-            `Lanjut kirim Halaman ${nextNum} (${i + 2} dari ${selectedList.length} terpilih) ke WhatsApp?`,
-            [
-              { text: 'Selesai', style: 'cancel', onPress: () => resolve(false) },
-              { text: `Kirim Hal. ${nextNum} ke WhatsApp`, onPress: () => resolve(true) }
-            ],
-            { cancelable: true, onDismiss: () => resolve(false) }
-          );
-        });
+        const page = selectedList[i];
+        const pageNum = page.pageNumber || i + 1;
+        setBatchShareProgress({ current: i + 1, total: selectedList.length });
 
-        if (!proceed) {
+        const title = `Kirim Halaman ${pageNum} (${i + 1}/${selectedList.length} Terpilih) ke WhatsApp`;
+
+        const success = await shareFileNative(page.uri, mime, title);
+        if (!success || abortBatchShareRef.current) {
           break;
         }
-      } else {
+
+        // Brief delay between shares for clean OS transition without blocking alert
+        if (i < selectedList.length - 1) {
+          await new Promise((resolve) => setTimeout(resolve, 800));
+        }
+      }
+
+      if (!abortBatchShareRef.current) {
         Alert.alert(
-          'Semua Halaman Terpilih Selesai',
-          `Seluruh ${selectedList.length} halaman gambar terpilih telah selesai dikirim ke WhatsApp.`
+          'Semua Halaman Selesai Dikirim! 🎉',
+          `Seluruh ${selectedList.length} lembar foto terpilih telah selesai dikirim ke WhatsApp.`
         );
       }
+    } finally {
+      setIsBatchSharing(false);
+      setBatchShareProgress({ current: 0, total: 0 });
+    }
+  };
+
+  const handleCancelBatchShare = () => {
+    abortBatchShareRef.current = true;
+    setIsBatchSharing(false);
+    setBatchShareProgress({ current: 0, total: 0 });
+  };
+
+  const handleShareAllViaWhatsAppGallery = async () => {
+    if (!convertedResult) return;
+    const pages =
+      convertedResult.pages && convertedResult.pages.length > 0
+        ? convertedResult.pages
+        : [{ uri: convertedResult.uri, pageNumber: 1 }];
+
+    const selectedList = pages.filter((_, idx) => selectedPageIndices.includes(idx));
+
+    if (selectedList.length === 0) {
+      Alert.alert(
+        'Pilih Halaman Terlebih Dahulu',
+        'Silakan centang minimal 1 lembar halaman pada daftar di atas untuk dikirim ke WhatsApp.'
+      );
+      return;
+    }
+
+    setIsSavingStorage(true);
+    const cleanBaseName = selectedPdf?.name
+      ? selectedPdf.name.replace(/\.[^/.]+$/, '')
+      : 'dokumen_placeboo';
+
+    const res = await saveImagesDirectlyToGallery(selectedList, cleanBaseName);
+    setIsSavingStorage(false);
+
+    if (res.success) {
+      Linking.openURL('whatsapp://').catch(() => {
+        Alert.alert('Buka WhatsApp', 'Silakan buka aplikasi WhatsApp di ponsel Anda.');
+      });
+
+      Alert.alert(
+        'Foto Siap Dikirim di WhatsApp! 📸',
+        `Semua ${res.count} foto lembar dokumen telah tersimpan di Galeri Ponsel Anda.\n\nWhatsApp kini telah dibuka:\n1. Buka ruang obrolan tujuan\n2. Ketuk ikon Klip (📎) lalu Galeri\n3. Centang seluruh ${res.count} foto untuk langsung dikirim sekaligus dalam 1 pesan!`,
+        [{ text: 'Siap, Mengerti', style: 'default' }]
+      );
+    } else {
+      Alert.alert('Gagal Menyimpan', res.error || 'Terjadi kendala saat menyimpan foto ke galeri.');
     }
   };
 
@@ -943,6 +992,23 @@ export default function HomeScreen({ mode = 'pdf_to_image', onModeChange }) {
                   </ScrollView>
                 </View>
 
+                {/* Status Banner Jika Sedang Mengirim Batch ke WA */}
+                {isBatchSharing && (
+                  <View style={styles.batchSharingBanner}>
+                    <ActivityIndicator size="small" color="#15803d" />
+                    <Text style={styles.batchSharingText}>
+                      Mengirim Halaman {batchShareProgress.current} dari {batchShareProgress.total} ke WhatsApp...
+                    </Text>
+                    <TouchableOpacity
+                      style={styles.btnCancelBatch}
+                      onPress={handleCancelBatchShare}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={styles.btnCancelBatchText}>Batal</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+
                 {/* 2. Tombol Download Semua Halaman yang Dipilih Langsung */}
                 <TouchableOpacity
                   style={[
@@ -980,40 +1046,55 @@ export default function HomeScreen({ mode = 'pdf_to_image', onModeChange }) {
                   </View>
                 </TouchableOpacity>
 
-                {/* 3. Tombol Kirim Semua Halaman yang Dipilih ke WhatsApp */}
+                {/* 3. Tombol Kirim Langsung Semua Halaman ke WhatsApp */}
                 <TouchableOpacity
                   style={[
                     styles.btnShareWhatsAppPrimary,
-                    selectedPageIndices.length === 0 && styles.btnActionDisabled
+                    (selectedPageIndices.length === 0 || isBatchSharing) && styles.btnActionDisabled
                   ]}
                   onPress={handleShareSelectedPages}
-                  disabled={selectedPageIndices.length === 0}
+                  disabled={selectedPageIndices.length === 0 || isBatchSharing}
                   activeOpacity={0.8}
                 >
                   <FontAwesome name="whatsapp" size={26} color="#ffffff" />
                   <View style={styles.btnShareWhatsAppPrimaryContent}>
                     <Text style={styles.btnShareWhatsAppPrimaryTitle}>
                       {selectedPageIndices.length === convertedResult.pages.length
-                        ? 'Kirim Semua Halaman yang Dipilih ke WhatsApp'
+                        ? 'Kirim Langsung Semua Halaman ke WhatsApp'
                         : selectedPageIndices.length > 0
-                        ? `Kirim (${selectedPageIndices.length}) Halaman Terpilih ke WhatsApp`
+                        ? `Kirim Langsung (${selectedPageIndices.length}) Halaman ke WhatsApp`
                         : 'Pilih Halaman untuk Dikirim ke WhatsApp'}
                     </Text>
                     <Text style={styles.btnShareWhatsAppPrimarySub}>
                       {selectedPageIndices.length > 0
-                        ? `Kirim ${
-                            selectedPageIndices.length === convertedResult.pages.length
-                              ? 'semua lembar'
-                              : `Hal. ${selectedPageIndices
-                                  .map((i) => convertedResult.pages[i]?.pageNumber || i + 1)
-                                  .join(', ')}`
-                          } satu per satu (bukan 1 halaman panjang)`
+                        ? `Kirim otomatis ${selectedPageIndices.length} halaman terpilih satu per satu tanpa jeda konfirmasi`
                         : 'Centang lembar halaman di atas yang ingin Anda kirim ke WhatsApp'}
                     </Text>
                   </View>
                 </TouchableOpacity>
 
-                {/* 4. Tombol Kirim Halaman Aktif Saja ke WhatsApp */}
+                {/* 4. Tombol Kirim Sekaligus Semua Foto via Galeri WhatsApp */}
+                <TouchableOpacity
+                  style={[
+                    styles.btnShareWhatsAppGroup,
+                    selectedPageIndices.length === 0 && styles.btnActionDisabled
+                  ]}
+                  onPress={handleShareAllViaWhatsAppGallery}
+                  disabled={selectedPageIndices.length === 0}
+                  activeOpacity={0.8}
+                >
+                  <MaterialIcons name="photo-library" size={22} color="#15803d" />
+                  <View style={styles.btnShareWhatsAppGroupContent}>
+                    <Text style={styles.btnShareWhatsAppGroupTitle}>
+                      Kirim Sekaligus Semua Foto (via Galeri WhatsApp)
+                    </Text>
+                    <Text style={styles.btnShareWhatsAppGroupSub}>
+                      Simpan {selectedPageIndices.length} foto ke Galeri & buka WhatsApp untuk lampirkan semua dalam 1 pesan
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+
+                {/* 5. Tombol Kirim Halaman Aktif Saja ke WhatsApp */}
                 <TouchableOpacity
                   style={styles.btnShareWhatsAppSingle}
                   onPress={() => handleSharePage(activePdfPageIdx)}
@@ -1025,7 +1106,7 @@ export default function HomeScreen({ mode = 'pdf_to_image', onModeChange }) {
                   </Text>
                 </TouchableOpacity>
 
-                {/* 5. Reset Button */}
+                {/* 6. Reset Button */}
                 <TouchableOpacity style={styles.btnResetFull} onPress={handleReset}>
                   <MaterialIcons name="refresh" size={18} color="#475569" />
                   <Text style={styles.btnResetFullText}>Konversi Dokumen Lain</Text>
@@ -1731,6 +1812,59 @@ const styles = StyleSheet.create({
     color: '#15803d',
     fontSize: 13,
     fontWeight: '700'
+  },
+  batchSharingBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#dcfce7',
+    borderWidth: 1.5,
+    borderColor: '#86efac',
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    gap: 8
+  },
+  batchSharingText: {
+    flex: 1,
+    color: '#15803d',
+    fontSize: 12,
+    fontWeight: '700'
+  },
+  btnCancelBatch: {
+    backgroundColor: '#ef4444',
+    paddingVertical: 5,
+    paddingHorizontal: 12,
+    borderRadius: 6
+  },
+  btnCancelBatchText: {
+    color: '#ffffff',
+    fontSize: 11,
+    fontWeight: '800'
+  },
+  btnShareWhatsAppGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: '#f0fdf4',
+    borderWidth: 1.5,
+    borderColor: '#22c55e',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 12
+  },
+  btnShareWhatsAppGroupContent: {
+    flex: 1
+  },
+  btnShareWhatsAppGroupTitle: {
+    color: '#15803d',
+    fontSize: 14,
+    fontWeight: '800'
+  },
+  btnShareWhatsAppGroupSub: {
+    color: '#166534',
+    fontSize: 11,
+    marginTop: 2
   },
   btnSaveAllStorage: {
     flexDirection: 'row',
