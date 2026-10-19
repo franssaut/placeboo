@@ -12,12 +12,8 @@ import { StatusBar } from 'expo-status-bar';
 import { MaterialIcons } from '@expo/vector-icons';
 import HomeScreen from './src/screens/HomeScreen';
 
-// Ignore non-fatal React Native blob warning from LogBox UI
-LogBox.ignoreLogs([
-  "Response.blob() is using React Native's Blob",
-  'Response.blob() is using React Native',
-  'Add the `expo-blob` package'
-]);
+// Completely suppress non-fatal warning overlays in mobile UI (Expo Go)
+LogBox.ignoreAllLogs(true);
 
 export default function App() {
   const [activeMode, setActiveMode] = useState('pdf_to_image'); // 'pdf_to_image' | 'image_to_pdf'

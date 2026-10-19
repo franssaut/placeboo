@@ -1,8 +1,6 @@
 import * as FileSystemLegacy from 'expo-file-system/legacy';
 import * as FileSystemNew from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
-import * as MediaLibrary from 'expo-media-library';
-import * as MediaLibraryLegacy from 'expo-media-library/legacy';
 import * as XLSX from 'xlsx';
 import { DEFAULT_DOCUMENT_PNG_BASE64 } from './defaultPngBase64';
 
@@ -76,38 +74,28 @@ async function readFileAsBase64(uri) {
     console.warn('[readFileAsBase64 modern FS warn]:', newFsErr?.message);
   }
 
-  // Method 3: Fallback native fetch + FileReader
+  // Method 3: Fallback native fetch + arrayBuffer (Bypasses Response.blob overhead & warnings)
   try {
-    const base64 = await new Promise((resolve, reject) => {
-      fetch(uri)
-        .then((res) => {
-          if (!res.ok && res.status !== 0) {
-            throw new Error(`Fetch status: ${res.status}`);
-          }
-          return res.blob();
-        })
-        .then((blob) => {
-          const reader = new FileReader();
-          reader.onloadend = () => {
-            if (typeof reader.result === 'string') {
-              const resStr = reader.result;
-              const b64 = resStr.includes(',') ? resStr.split(',')[1] : resStr;
-              resolve(b64);
-            } else {
-              resolve('');
-            }
-          };
-          reader.onerror = (e) => reject(e);
-          reader.readAsDataURL(blob);
-        })
-        .catch(reject);
-    });
-
-    if (base64 && base64.length > 0) {
-      return base64;
+    const res = await fetch(uri);
+    if (res.ok || res.status === 0) {
+      const buf = await res.arrayBuffer();
+      if (buf && buf.byteLength > 0) {
+        const bytes = new Uint8Array(buf);
+        let binary = '';
+        const chunkSize = 8192;
+        const len = bytes.byteLength;
+        for (let i = 0; i < len; i += chunkSize) {
+          const chunk = bytes.subarray(i, Math.min(i + chunkSize, len));
+          binary += String.fromCharCode.apply(null, chunk);
+        }
+        const b64 = btoa(binary);
+        if (b64 && b64.length > 0) {
+          return b64;
+        }
+      }
     }
   } catch (fetchErr) {
-    console.warn('[readFileAsBase64 fetch method warn]:', fetchErr?.message);
+    console.warn('[readFileAsBase64 fetch arrayBuffer warn]:', fetchErr?.message);
   }
 
   return '';
@@ -541,33 +529,39 @@ export async function saveImagesDirectlyToGallery(pages, baseFileName = 'dokumen
   }
 
   try {
-    // 1. Request Media Library Permissions (writeOnly access)
-    let permissionGranted = false;
+    let MediaLibrary = null;
+    let MediaLibraryLegacy = null;
+
     try {
-      if (MediaLibrary && typeof MediaLibrary.getPermissionsAsync === 'function') {
-        const currentPerm = await MediaLibrary.getPermissionsAsync(true);
-        if (currentPerm.granted) {
-          permissionGranted = true;
-        } else if (typeof MediaLibrary.requestPermissionsAsync === 'function') {
-          const req = await MediaLibrary.requestPermissionsAsync(true);
-          permissionGranted = req.granted;
-        }
-      } else if (MediaLibraryLegacy && typeof MediaLibraryLegacy.getPermissionsAsync === 'function') {
-        const currentPerm = await MediaLibraryLegacy.getPermissionsAsync(true);
-        if (currentPerm.granted) {
-          permissionGranted = true;
-        } else if (typeof MediaLibraryLegacy.requestPermissionsAsync === 'function') {
-          const req = await MediaLibraryLegacy.requestPermissionsAsync(true);
-          permissionGranted = req.granted;
-        }
+      MediaLibraryLegacy = require('expo-media-library/legacy');
+    } catch (_) {}
+
+    try {
+      if (!MediaLibraryLegacy) {
+        MediaLibrary = require('expo-media-library');
       }
-    } catch (permErr) {
-      console.warn('[saveImagesDirectlyToGallery permission check warn]:', permErr?.message);
+    } catch (_) {}
+
+    const ml = MediaLibraryLegacy || MediaLibrary;
+    let permissionGranted = false;
+
+    if (ml && typeof ml.requestPermissionsAsync === 'function') {
+      try {
+        const currentPerm = await ml.getPermissionsAsync(true);
+        if (currentPerm && currentPerm.granted) {
+          permissionGranted = true;
+        } else {
+          const req = await ml.requestPermissionsAsync(true);
+          permissionGranted = req && req.granted;
+        }
+      } catch (permErr) {
+        console.warn('[MediaLibrary permission warn]:', permErr?.message);
+      }
     }
 
-    // If permission was denied by the user, fallback directly to SAF
-    if (!permissionGranted) {
-      console.log('[Media Library permission not granted, falling back to StorageAccessFramework]');
+    // Fallback to StorageAccessFramework if MediaLibrary is unavailable or permission denied in Expo Go
+    if (!permissionGranted || !ml) {
+      console.log('[Using StorageAccessFramework for direct zero-crash save]');
       const fallbackRes = await saveAllPagesToStorage(pageList, baseFileName);
       return {
         ...fallbackRes,
@@ -575,49 +569,37 @@ export async function saveImagesDirectlyToGallery(pages, baseFileName = 'dokumen
       };
     }
 
-    // 2. Save each image page directly into the device's Photo Gallery
     let savedCount = 0;
-
     for (let i = 0; i < pageList.length; i++) {
       const page = pageList[i];
       let pageUri = typeof page === 'string' ? page : page.uri;
       if (!pageUri) continue;
 
-      // Ensure proper URI formatting
       if (!pageUri.startsWith('file://') && !pageUri.startsWith('content://')) {
         pageUri = `file://${pageUri}`;
       }
 
       let saved = false;
 
-      // Method 1: Modern Expo SDK Asset.create
-      if (!saved && MediaLibrary?.Asset && typeof MediaLibrary.Asset.create === 'function') {
+      if (!saved && typeof ml.saveToLibraryAsync === 'function') {
         try {
-          await MediaLibrary.Asset.create(pageUri);
+          await ml.saveToLibraryAsync(pageUri);
           saved = true;
-        } catch (assetErr) {
-          console.warn(`[Asset.create error for page ${i + 1}]:`, assetErr?.message);
-        }
+        } catch (_) {}
       }
 
-      // Method 2: Legacy saveToLibraryAsync
-      if (!saved && MediaLibraryLegacy && typeof MediaLibraryLegacy.saveToLibraryAsync === 'function') {
+      if (!saved && typeof ml.createAssetAsync === 'function') {
         try {
-          await MediaLibraryLegacy.saveToLibraryAsync(pageUri);
+          await ml.createAssetAsync(pageUri);
           saved = true;
-        } catch (saveErr) {
-          console.warn(`[saveToLibraryAsync error for page ${i + 1}]:`, saveErr?.message);
-        }
+        } catch (_) {}
       }
 
-      // Method 3: Legacy createAssetAsync
-      if (!saved && MediaLibraryLegacy && typeof MediaLibraryLegacy.createAssetAsync === 'function') {
+      if (!saved && ml.Asset && typeof ml.Asset.create === 'function') {
         try {
-          await MediaLibraryLegacy.createAssetAsync(pageUri);
+          await ml.Asset.create(pageUri);
           saved = true;
-        } catch (createErr) {
-          console.warn(`[createAssetAsync error for page ${i + 1}]:`, createErr?.message);
-        }
+        } catch (_) {}
       }
 
       if (saved) {
@@ -634,15 +616,13 @@ export async function saveImagesDirectlyToGallery(pages, baseFileName = 'dokumen
       };
     }
 
-    // Fallback to SAF if 0 assets were saved
-    console.warn('[Direct gallery save produced 0 saved assets, falling back to SAF]');
     const fallbackRes = await saveAllPagesToStorage(pageList, baseFileName);
     return {
       ...fallbackRes,
       fallbackSAF: true
     };
   } catch (err) {
-    console.error('[saveImagesDirectlyToGallery Fatal Error]:', err);
+    console.error('[saveImagesDirectlyToGallery Fatal]:', err);
     const fallbackRes = await saveAllPagesToStorage(pageList, baseFileName);
     return {
       ...fallbackRes,

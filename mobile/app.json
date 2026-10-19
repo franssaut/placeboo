@@ -31,14 +31,6 @@
     "web": {
       "favicon": "./assets/favicon.png"
     },
-    "plugins": [
-      [
-        "expo-media-library",
-        {
-          "photosPermission": "Izinkan Placeboo untuk menyimpan dokumen foto langsung ke Galeri Anda.",
-          "savePhotosPermission": "Izinkan Placeboo untuk menyimpan dokumen foto langsung ke Galeri Anda."
-        }
-      ]
-    ]
+    "plugins": []
   }
 }
