@@ -1,6 +1,8 @@
 import * as FileSystemLegacy from 'expo-file-system/legacy';
 import * as FileSystemNew from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
+import * as MediaLibrary from 'expo-media-library';
+import * as MediaLibraryLegacy from 'expo-media-library/legacy';
 import * as XLSX from 'xlsx';
 import { DEFAULT_DOCUMENT_PNG_BASE64 } from './defaultPngBase64';
 
@@ -522,3 +524,130 @@ export async function saveAllPagesToStorage(pages, baseFileName = 'dokumen') {
     return { success: false, error: err?.message || 'Gagal menyimpan berkas ke folder.' };
   }
 }
+
+/**
+ * Saves all converted image pages directly to the device's native Photo Gallery / Camera Roll.
+ * Allows 1-tap direct saving without requiring manual folder browsing (SAF).
+ * Includes automatic fallback to StorageAccessFramework if gallery permissions are denied.
+ */
+export async function saveImagesDirectlyToGallery(pages, baseFileName = 'dokumen') {
+  if (!pages) {
+    return { success: false, error: 'Tidak ada gambar untuk disimpan.' };
+  }
+
+  const pageList = Array.isArray(pages) ? pages : [pages];
+  if (pageList.length === 0) {
+    return { success: false, error: 'Daftar halaman kosong.' };
+  }
+
+  try {
+    // 1. Request Media Library Permissions (writeOnly access)
+    let permissionGranted = false;
+    try {
+      if (MediaLibrary && typeof MediaLibrary.getPermissionsAsync === 'function') {
+        const currentPerm = await MediaLibrary.getPermissionsAsync(true);
+        if (currentPerm.granted) {
+          permissionGranted = true;
+        } else if (typeof MediaLibrary.requestPermissionsAsync === 'function') {
+          const req = await MediaLibrary.requestPermissionsAsync(true);
+          permissionGranted = req.granted;
+        }
+      } else if (MediaLibraryLegacy && typeof MediaLibraryLegacy.getPermissionsAsync === 'function') {
+        const currentPerm = await MediaLibraryLegacy.getPermissionsAsync(true);
+        if (currentPerm.granted) {
+          permissionGranted = true;
+        } else if (typeof MediaLibraryLegacy.requestPermissionsAsync === 'function') {
+          const req = await MediaLibraryLegacy.requestPermissionsAsync(true);
+          permissionGranted = req.granted;
+        }
+      }
+    } catch (permErr) {
+      console.warn('[saveImagesDirectlyToGallery permission check warn]:', permErr?.message);
+    }
+
+    // If permission was denied by the user, fallback directly to SAF
+    if (!permissionGranted) {
+      console.log('[Media Library permission not granted, falling back to StorageAccessFramework]');
+      const fallbackRes = await saveAllPagesToStorage(pageList, baseFileName);
+      return {
+        ...fallbackRes,
+        fallbackSAF: true
+      };
+    }
+
+    // 2. Save each image page directly into the device's Photo Gallery
+    let savedCount = 0;
+
+    for (let i = 0; i < pageList.length; i++) {
+      const page = pageList[i];
+      let pageUri = typeof page === 'string' ? page : page.uri;
+      if (!pageUri) continue;
+
+      // Ensure proper URI formatting
+      if (!pageUri.startsWith('file://') && !pageUri.startsWith('content://')) {
+        pageUri = `file://${pageUri}`;
+      }
+
+      let saved = false;
+
+      // Method 1: Modern Expo SDK Asset.create
+      if (!saved && MediaLibrary?.Asset && typeof MediaLibrary.Asset.create === 'function') {
+        try {
+          await MediaLibrary.Asset.create(pageUri);
+          saved = true;
+        } catch (assetErr) {
+          console.warn(`[Asset.create error for page ${i + 1}]:`, assetErr?.message);
+        }
+      }
+
+      // Method 2: Legacy saveToLibraryAsync
+      if (!saved && MediaLibraryLegacy && typeof MediaLibraryLegacy.saveToLibraryAsync === 'function') {
+        try {
+          await MediaLibraryLegacy.saveToLibraryAsync(pageUri);
+          saved = true;
+        } catch (saveErr) {
+          console.warn(`[saveToLibraryAsync error for page ${i + 1}]:`, saveErr?.message);
+        }
+      }
+
+      // Method 3: Legacy createAssetAsync
+      if (!saved && MediaLibraryLegacy && typeof MediaLibraryLegacy.createAssetAsync === 'function') {
+        try {
+          await MediaLibraryLegacy.createAssetAsync(pageUri);
+          saved = true;
+        } catch (createErr) {
+          console.warn(`[createAssetAsync error for page ${i + 1}]:`, createErr?.message);
+        }
+      }
+
+      if (saved) {
+        savedCount++;
+      }
+    }
+
+    if (savedCount > 0) {
+      return {
+        success: true,
+        count: savedCount,
+        total: pageList.length,
+        method: 'gallery'
+      };
+    }
+
+    // Fallback to SAF if 0 assets were saved
+    console.warn('[Direct gallery save produced 0 saved assets, falling back to SAF]');
+    const fallbackRes = await saveAllPagesToStorage(pageList, baseFileName);
+    return {
+      ...fallbackRes,
+      fallbackSAF: true
+    };
+  } catch (err) {
+    console.error('[saveImagesDirectlyToGallery Fatal Error]:', err);
+    const fallbackRes = await saveAllPagesToStorage(pageList, baseFileName);
+    return {
+      ...fallbackRes,
+      fallbackSAF: true
+    };
+  }
+}
+

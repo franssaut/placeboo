@@ -17,6 +17,7 @@ import {
   formatBytes,
   convertDocumentMobile,
   shareFileNative,
+  saveImagesDirectlyToGallery,
   saveAllPagesToStorage
 } from '../services/mobileConverter';
 
@@ -297,20 +298,30 @@ export default function HomeScreen({ mode = 'pdf_to_image', onModeChange }) {
   };
 
   const handleSaveAllToDevice = async () => {
-    if (!convertedResult?.pages || convertedResult.pages.length === 0) return;
+    if (!convertedResult) return;
+    const pages =
+      convertedResult.pages && convertedResult.pages.length > 0
+        ? convertedResult.pages
+        : [{ uri: convertedResult.uri, pageNumber: 1 }];
+
     setIsSavingStorage(true);
     const cleanBaseName = selectedPdf?.name
       ? selectedPdf.name.replace(/\.[^/.]+$/, '')
       : 'dokumen_placeboo';
-    const res = await saveAllPagesToStorage(convertedResult.pages, cleanBaseName);
+
+    const res = await saveImagesDirectlyToGallery(pages, cleanBaseName);
     setIsSavingStorage(false);
 
     if (res.success) {
+      const msg = res.fallbackSAF
+        ? `Semua ${res.count} lembar foto berhasil disimpan ke folder penyimpanan ponsel Anda.\n\nAnda dapat membuka WhatsApp sekarang dan melampirkan seluruh foto dari galeri.`
+        : `Semua ${res.count} lembar foto berhasil disimpan langsung ke Galeri Foto ponsel Anda!\n\nAnda dapat membuka WhatsApp sekarang dan melampirkan seluruh foto langsung dari album Galeri.`;
+
       Alert.alert(
-        'Berhasil Disimpan!',
-        `Semua ${res.count} lembar halaman PDF telah tersimpan sebagai file foto terpisah di folder ponsel Anda.\n\nAnda dapat membuka WhatsApp sekarang dan melampirkan seluruh foto sekaligus dari galeri!`,
+        'Berhasil Disimpan ke Galeri!',
+        msg,
         [
-          { text: 'Nanti', style: 'cancel' },
+          { text: 'Tutup', style: 'cancel' },
           {
             text: 'Buka WhatsApp',
             onPress: () => Linking.openURL('whatsapp://').catch(() => {})
@@ -318,7 +329,7 @@ export default function HomeScreen({ mode = 'pdf_to_image', onModeChange }) {
         ]
       );
     } else if (res.error && !res.error.includes('dibatalkan')) {
-      Alert.alert('Gagal Menyimpan', res.error);
+      Alert.alert('Gagal Menyimpan ke Galeri', res.error);
     }
   };
 
@@ -686,7 +697,29 @@ export default function HomeScreen({ mode = 'pdf_to_image', onModeChange }) {
 
             {isPdfToImage && convertedResult.pages && convertedResult.pages.length > 1 ? (
               <View style={styles.multiShareContainer}>
-                {/* 1. Tombol Utama: Kirim Semua Halaman ke WhatsApp Secara Berurutan (Bukan 1 halaman panjang) */}
+                {/* 1. Tombol Utama: Simpan Langsung Semua File di Galeri HP */}
+                <TouchableOpacity
+                  style={styles.btnSaveAllStorage}
+                  onPress={handleSaveAllToDevice}
+                  disabled={isSavingStorage}
+                  activeOpacity={0.8}
+                >
+                  {isSavingStorage ? (
+                    <ActivityIndicator size="small" color="#ffffff" />
+                  ) : (
+                    <MaterialIcons name="photo-library" size={26} color="#ffffff" />
+                  )}
+                  <View style={styles.btnSaveAllStorageContent}>
+                    <Text style={styles.btnSaveAllStorageTitle}>
+                      Simpan Langsung Semua File di Galeri
+                    </Text>
+                    <Text style={styles.btnSaveAllStorageSub}>
+                      Simpan {convertedResult.pages.length} lembar foto langsung ke Galeri HP (tanpa ribet pilih folder)
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+
+                {/* 2. Tombol Kirim Semua Halaman ke WhatsApp Secara Berurutan */}
                 <TouchableOpacity
                   style={styles.btnShareWhatsAppPrimary}
                   onPress={handleShareSequentially}
@@ -699,28 +732,6 @@ export default function HomeScreen({ mode = 'pdf_to_image', onModeChange }) {
                     </Text>
                     <Text style={styles.btnShareWhatsAppPrimarySub}>
                       Kirim lembar 1 sampai {convertedResult.pages.length} satu per satu (bukan 1 halaman panjang)
-                    </Text>
-                  </View>
-                </TouchableOpacity>
-
-                {/* 2. Tombol Simpan Semua Lembar Gambar ke Galeri / Download */}
-                <TouchableOpacity
-                  style={styles.btnSaveAllStorage}
-                  onPress={handleSaveAllToDevice}
-                  disabled={isSavingStorage}
-                  activeOpacity={0.8}
-                >
-                  {isSavingStorage ? (
-                    <ActivityIndicator size="small" color="#ffffff" />
-                  ) : (
-                    <MaterialIcons name="file-download" size={24} color="#ffffff" />
-                  )}
-                  <View style={styles.btnSaveAllStorageContent}>
-                    <Text style={styles.btnSaveAllStorageTitle}>
-                      Simpan Semua {convertedResult.pages.length} Lembar Foto ke Galeri
-                    </Text>
-                    <Text style={styles.btnSaveAllStorageSub}>
-                      Simpan file gambar terpisah agar bisa dipilih & dikirim sekaligus di WhatsApp
                     </Text>
                   </View>
                 </TouchableOpacity>
@@ -797,16 +808,41 @@ export default function HomeScreen({ mode = 'pdf_to_image', onModeChange }) {
                 </TouchableOpacity>
               </View>
             ) : (
-              <View style={styles.successActionRow}>
-                <TouchableOpacity style={styles.btnShare} onPress={handleShare}>
-                  <FontAwesome name="whatsapp" size={20} color="#ffffff" />
-                  <Text style={styles.btnShareText}>
-                    {isPdfToImage ? 'Kirim Gambar ke WhatsApp' : 'Kirim Berkas PDF ke WhatsApp'}
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.btnResetSmall} onPress={handleReset}>
-                  <MaterialIcons name="refresh" size={18} color="#475569" />
-                </TouchableOpacity>
+              <View style={styles.multiShareContainer}>
+                {isPdfToImage && (
+                  <TouchableOpacity
+                    style={styles.btnSaveAllStorage}
+                    onPress={handleSaveAllToDevice}
+                    disabled={isSavingStorage}
+                    activeOpacity={0.8}
+                  >
+                    {isSavingStorage ? (
+                      <ActivityIndicator size="small" color="#ffffff" />
+                    ) : (
+                      <MaterialIcons name="photo-library" size={24} color="#ffffff" />
+                    )}
+                    <View style={styles.btnSaveAllStorageContent}>
+                      <Text style={styles.btnSaveAllStorageTitle}>
+                        Simpan Langsung File di Galeri
+                      </Text>
+                      <Text style={styles.btnSaveAllStorageSub}>
+                        Simpan foto langsung ke Galeri Foto HP Anda
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                )}
+
+                <View style={styles.successActionRow}>
+                  <TouchableOpacity style={styles.btnShare} onPress={handleShare}>
+                    <FontAwesome name="whatsapp" size={20} color="#ffffff" />
+                    <Text style={styles.btnShareText}>
+                      {isPdfToImage ? 'Kirim Gambar ke WhatsApp' : 'Kirim Berkas PDF ke WhatsApp'}
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.btnResetSmall} onPress={handleReset}>
+                    <MaterialIcons name="refresh" size={18} color="#475569" />
+                  </TouchableOpacity>
+                </View>
               </View>
             )}
           </View>
@@ -1477,26 +1513,26 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 12,
     backgroundColor: '#0284c7',
-    paddingVertical: 13,
-    paddingHorizontal: 15,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
     borderRadius: 12,
     shadowColor: '#0284c7',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    elevation: 3
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.35,
+    shadowRadius: 5,
+    elevation: 4
   },
   btnSaveAllStorageContent: {
     flex: 1
   },
   btnSaveAllStorageTitle: {
     color: '#ffffff',
-    fontSize: 14,
-    fontWeight: '700'
+    fontSize: 15,
+    fontWeight: '800'
   },
   btnSaveAllStorageSub: {
     color: '#e0f2fe',
-    fontSize: 10,
+    fontSize: 11,
     marginTop: 2
   },
   pagesListSection: {
