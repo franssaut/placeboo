@@ -1,7 +1,6 @@
 import * as FileSystemLegacy from 'expo-file-system/legacy';
 import * as FileSystemNew from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
-import * as MediaLibrary from 'expo-media-library';
 import * as XLSX from 'xlsx';
 import { DEFAULT_DOCUMENT_PNG_BASE64 } from './defaultPngBase64';
 
@@ -445,35 +444,6 @@ export async function convertDocumentMobile(filesInput, targetFormat = 'XLSX', o
   };
 }
 
-/**
- * Saves one or multiple image URIs directly into the user's Gallery / Photos
- */
-export async function saveImagesToGallery(uris) {
-  try {
-    const { status } = await MediaLibrary.requestPermissionsAsync();
-    if (status !== 'granted') {
-      return {
-        success: false,
-        error: 'Izin akses galeri tidak diberikan. Silakan aktifkan izin galeri pada pengaturan ponsel.'
-      };
-    }
-
-    const uriList = Array.isArray(uris) ? uris : [uris];
-    let savedCount = 0;
-
-    for (const u of uriList) {
-      if (u) {
-        await MediaLibrary.saveToLibraryAsync(u);
-        savedCount++;
-      }
-    }
-
-    return { success: true, count: savedCount };
-  } catch (err) {
-    console.error('[saveImagesToGallery Error]:', err);
-    return { success: false, error: err?.message || 'Gagal menyimpan berkas ke galeri.' };
-  }
-}
 
 /**
  * Shares or saves the converted file natively via iOS/Android Share Sheet

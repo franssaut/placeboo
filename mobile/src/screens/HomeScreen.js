@@ -15,8 +15,7 @@ import {
   MAX_FILE_SIZE,
   formatBytes,
   convertDocumentMobile,
-  shareFileNative,
-  saveImagesToGallery
+  shareFileNative
 } from '../services/mobileConverter';
 
 const MAX_IMAGES_LIMIT = 20;
@@ -30,7 +29,6 @@ export default function HomeScreen({ mode = 'pdf_to_image', onModeChange }) {
   const [progress, setProgress] = useState(0);
   const [convertedResult, setConvertedResult] = useState(null);
   const [activePdfPageIdx, setActivePdfPageIdx] = useState(0);
-  const [isSavingGallery, setIsSavingGallery] = useState(false);
 
   // Sync mode from parent if provided
   useEffect(() => {
@@ -239,36 +237,6 @@ export default function HomeScreen({ mode = 'pdf_to_image', onModeChange }) {
           Alert.alert('Informasi', 'Fitur penyimpanan berkas telah dibuka di sistem perangkat Anda.');
         }
       }
-    }
-  };
-
-  const handleSaveAllToGallery = async () => {
-    if (!convertedResult?.pages || convertedResult.pages.length === 0) {
-      if (convertedResult?.uri) {
-        setIsSavingGallery(true);
-        const res = await saveImagesToGallery([convertedResult.uri]);
-        setIsSavingGallery(false);
-        if (res.success) {
-          Alert.alert('Tersimpan di Galeri', 'Gambar berhasil disimpan ke Galeri Foto perangkat Anda!');
-        } else {
-          Alert.alert('Gagal Menyimpan', res.error || 'Gagal menyimpan ke galeri.');
-        }
-      }
-      return;
-    }
-
-    setIsSavingGallery(true);
-    const uris = convertedResult.pages.map((p) => p.uri);
-    const res = await saveImagesToGallery(uris);
-    setIsSavingGallery(false);
-
-    if (res.success) {
-      Alert.alert(
-        'Berhasil Disimpan ke Galeri!',
-        `Semua ${res.count} gambar halaman berhasil disimpan langsung ke aplikasi Galeri / Foto ponsel Anda.`
-      );
-    } else {
-      Alert.alert('Gagal Menyimpan ke Galeri', res.error || 'Gagal menyimpan ke galeri.');
     }
   };
 
@@ -645,7 +613,7 @@ export default function HomeScreen({ mode = 'pdf_to_image', onModeChange }) {
             {isPdfToImage && convertedResult.pages && convertedResult.pages.length > 1 ? (
               <View style={styles.multiShareContainer}>
                 {/* 1. Primary Share Action: 1 Gambar Utuh (Semua Halaman) */}
-                {convertedResult.stitchedUri && (
+                {convertedResult.stitchedUri ? (
                   <TouchableOpacity
                     style={styles.btnShareAllImage}
                     onPress={handleShareStitched}
@@ -661,33 +629,9 @@ export default function HomeScreen({ mode = 'pdf_to_image', onModeChange }) {
                       </Text>
                     </View>
                   </TouchableOpacity>
-                )}
+                ) : null}
 
-                {/* 2. Direct Gallery Save Action: Simpan Semua Lembar Gambar ke Galeri */}
-                <TouchableOpacity
-                  style={styles.btnSaveGallery}
-                  onPress={handleSaveAllToGallery}
-                  disabled={isSavingGallery}
-                  activeOpacity={0.8}
-                >
-                  {isSavingGallery ? (
-                    <ActivityIndicator size="small" color="#0f172a" />
-                  ) : (
-                    <MaterialIcons name="save-alt" size={20} color="#0f172a" />
-                  )}
-                  <View style={styles.btnSaveGalleryContent}>
-                    <Text style={styles.btnSaveGalleryTitle}>
-                      {isSavingGallery
-                        ? 'Menyimpan ke Galeri...'
-                        : `Simpan Semua ke Galeri (${convertedResult.pages.length} Gambar)`}
-                    </Text>
-                    <Text style={styles.btnSaveGallerySub}>
-                      Simpan tiap lembar foto langsung ke album galeri ponsel
-                    </Text>
-                  </View>
-                </TouchableOpacity>
-
-                {/* 3. Row: Share current preview page & Reset */}
+                {/* 2. Row: Share current preview page & Reset */}
                 <View style={styles.secondaryShareRow}>
                   <TouchableOpacity
                     style={styles.btnShareSecondary}
@@ -715,19 +659,6 @@ export default function HomeScreen({ mode = 'pdf_to_image', onModeChange }) {
                   <MaterialIcons name="share" size={18} color="#ffffff" />
                   <Text style={styles.btnShareText}>Buka / Bagikan Berkas</Text>
                 </TouchableOpacity>
-                {isPdfToImage && (
-                  <TouchableOpacity
-                    style={styles.btnSaveGallerySingle}
-                    onPress={handleSaveAllToGallery}
-                    disabled={isSavingGallery}
-                  >
-                    {isSavingGallery ? (
-                      <ActivityIndicator size="small" color="#0f172a" />
-                    ) : (
-                      <MaterialIcons name="save-alt" size={18} color="#0f172a" />
-                    )}
-                  </TouchableOpacity>
-                )}
                 <TouchableOpacity style={styles.btnResetSmall} onPress={handleReset}>
                   <MaterialIcons name="refresh" size={18} color="#475569" />
                 </TouchableOpacity>
@@ -1378,39 +1309,6 @@ const styles = StyleSheet.create({
     color: '#e0e7ff',
     fontSize: 10,
     marginTop: 2
-  },
-  btnSaveGallery: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    backgroundColor: '#f8fafc',
-    borderWidth: 1.5,
-    borderColor: '#cbd5e1',
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    borderRadius: 10
-  },
-  btnSaveGalleryContent: {
-    flex: 1
-  },
-  btnSaveGalleryTitle: {
-    color: '#0f172a',
-    fontSize: 12,
-    fontWeight: '700'
-  },
-  btnSaveGallerySub: {
-    color: '#64748b',
-    fontSize: 10,
-    marginTop: 1
-  },
-  btnSaveGallerySingle: {
-    backgroundColor: '#f8fafc',
-    borderWidth: 1,
-    borderColor: '#cbd5e1',
-    padding: 10,
-    borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center'
   },
   secondaryShareRow: {
     flexDirection: 'row',
