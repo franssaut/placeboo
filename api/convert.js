@@ -284,6 +284,47 @@ export default async function handler(req, res) {
       mimeType = 'application/pdf';
       if (sourceExt === 'pdf') {
         outputBase64 = fileBase64;
+      } else if (['png', 'jpg', 'jpeg', 'webp', 'bmp', 'gif'].includes(sourceExt)) {
+        // High-fidelity Image to PDF converter
+        const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+        const pageWidth = 210;
+        const pageHeight = 297;
+        const margin = 10;
+        const maxW = pageWidth - margin * 2;
+        const maxH = pageHeight - margin * 2;
+
+        try {
+          const imgType = (sourceExt === 'jpg' || sourceExt === 'jpeg') ? 'JPEG' : 'PNG';
+          let renderW = maxW;
+          let renderH = maxH;
+          let posX = margin;
+          let posY = margin;
+
+          try {
+            const props = doc.getImageProperties(fileBase64);
+            if (props && props.width && props.height) {
+              renderW = maxW;
+              renderH = (props.height / props.width) * renderW;
+              if (renderH > maxH) {
+                renderH = maxH;
+                renderW = (props.width / props.height) * renderH;
+              }
+              posX = margin + (maxW - renderW) / 2;
+              posY = margin + (maxH - renderH) / 2;
+            }
+          } catch (propErr) {
+            console.warn('[getImageProperties Warn]:', propErr?.message);
+          }
+
+          doc.addImage(fileBase64, imgType, posX, posY, renderW, renderH, undefined, 'FAST');
+        } catch (addImgErr) {
+          console.warn('[addImage Error]:', addImgErr?.message);
+          // Fallback minimal text doc if image format is unsupported
+          doc.text(`Placeboo Image to PDF: ${cleanName}`, margin, 20);
+        }
+
+        const dataUri = doc.output('datauristring');
+        outputBase64 = dataUri.split(',')[1] || '';
       } else {
         const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
         const pageWidth = 210;

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   StyleSheet,
   Text,
@@ -6,11 +6,10 @@ import {
   TouchableOpacity,
   ScrollView,
   Alert,
-  ActivityIndicator,
-  Animated
+  ActivityIndicator
 } from 'react-native';
 import * as DocumentPicker from 'expo-document-picker';
-import { MaterialIcons, Ionicons } from '@expo/vector-icons';
+import { MaterialIcons } from '@expo/vector-icons';
 import {
   MAX_FILE_SIZE,
   formatBytes,
@@ -18,40 +17,43 @@ import {
   shareFileNative
 } from '../services/mobileConverter';
 
-export default function HomeScreen({ defaultFormat = 'XLSX' }) {
+export default function HomeScreen({ mode = 'pdf_to_image', onModeChange }) {
+  const [activeMode, setActiveMode] = useState(mode);
   const [selectedFile, setSelectedFile] = useState(null);
-  const [targetFormat, setTargetFormat] = useState(defaultFormat);
+  const [targetFormat, setTargetFormat] = useState('PNG');
   const [isConverting, setIsConverting] = useState(false);
   const [progress, setProgress] = useState(0);
   const [convertedResult, setConvertedResult] = useState(null);
 
-  React.useEffect(() => {
-    if (defaultFormat) {
-      setTargetFormat(defaultFormat);
+  // Sync mode from parent if provided
+  useEffect(() => {
+    if (mode && mode !== activeMode) {
+      handleSwitchMode(mode);
     }
-  }, [defaultFormat]);
+  }, [mode]);
 
-  const formats = [
-    { label: 'EXCEL (.xlsx)', value: 'XLSX', icon: 'grid-on' },
-    { label: 'WORD (.docx)', value: 'DOCX', icon: 'description' },
-    { label: 'PDF (.pdf)', value: 'PDF', icon: 'picture-as-pdf' },
-    { label: 'GAMBAR (.png)', value: 'PNG', icon: 'image' },
-    { label: 'TEKS (.txt)', value: 'TXT', icon: 'text-fields' }
-  ];
+  const handleSwitchMode = (newMode) => {
+    setActiveMode(newMode);
+    setSelectedFile(null);
+    setConvertedResult(null);
+    if (newMode === 'pdf_to_image') {
+      setTargetFormat('PNG');
+    } else {
+      setTargetFormat('PDF');
+    }
+    if (onModeChange) {
+      onModeChange(newMode);
+    }
+  };
 
-  const popularTools = [
-    { title: 'PDF ke Excel', tag: 'PDF → XLSX', format: 'XLSX', icon: 'table-view', color: '#10b981' },
-    { title: 'PDF ke Word', tag: 'PDF → DOCX', format: 'DOCX', icon: 'article', color: '#4f46e5' },
-    { title: 'PDF ke Gambar', tag: 'PDF → PNG', format: 'PNG', icon: 'photo-library', color: '#06b6d4' },
-    { title: 'Gambar ke PDF', tag: 'IMG → PDF', format: 'PDF', icon: 'image', color: '#f59e0b' },
-    { title: 'Excel ke PDF', tag: 'XLSX → PDF', format: 'PDF', icon: 'table-chart', color: '#8b5cf6' },
-    { title: 'OCR Scanner AI', tag: 'AI VISION', format: 'TXT', icon: 'document-scanner', color: '#ec4899' }
-  ];
+  const isPdfToImage = activeMode === 'pdf_to_image';
 
   const pickDocument = async () => {
     try {
+      const allowedTypes = isPdfToImage ? ['application/pdf'] : ['image/*'];
+
       const result = await DocumentPicker.getDocumentAsync({
-        type: '*/*',
+        type: allowedTypes,
         copyToCacheDirectory: true
       });
 
@@ -67,31 +69,47 @@ export default function HomeScreen({ defaultFormat = 'XLSX' }) {
           return;
         }
 
+        const ext = file.name && file.name.includes('.') ? file.name.split('.').pop().toLowerCase() : '';
+
+        // Validation based on active mode
+        if (isPdfToImage && ext !== 'pdf') {
+          Alert.alert(
+            'Berkas Tidak Sesuai',
+            'Silakan pilih berkas dokumen berformat PDF untuk mode PDF ke Gambar.'
+          );
+          return;
+        }
+
+        if (!isPdfToImage && !['png', 'jpg', 'jpeg', 'webp', 'bmp'].includes(ext)) {
+          Alert.alert(
+            'Berkas Tidak Sesuai',
+            'Silakan pilih berkas gambar (JPG, PNG, atau WEBP) untuk mode Gambar ke PDF.'
+          );
+          return;
+        }
+
         setSelectedFile(file);
         setConvertedResult(null);
-
-        // Auto adjust target format if source matches target
-        const ext = file.name.includes('.') ? file.name.split('.').pop().toLowerCase() : '';
-        if (ext === 'pdf' && targetFormat === 'PDF') {
-          setTargetFormat('XLSX');
-        } else if (['xlsx', 'docx', 'png', 'jpg'].includes(ext) && targetFormat.toLowerCase() === ext) {
-          setTargetFormat('PDF');
-        }
       }
     } catch (err) {
       console.warn('Pick document error:', err);
-      Alert.alert('Gagal Memilih Berkas', 'Terjadi kesalahan saat mengakses berkas.');
+      Alert.alert('Gagal Memilih Berkas', 'Terjadi kesalahan saat mengakses berkas pada perangkat.');
     }
   };
 
   const handleConvert = async () => {
     if (!selectedFile) {
-      Alert.alert('Pilih Berkas', 'Silakan pilih berkas dokumen yang ingin dikonversi terlebih dahulu.');
+      Alert.alert(
+        'Pilih Berkas',
+        isPdfToImage
+          ? 'Silakan pilih berkas PDF yang ingin dikonversi.'
+          : 'Silakan pilih berkas Gambar yang ingin dikonversi ke PDF.'
+      );
       return;
     }
 
     setIsConverting(true);
-    setProgress(10);
+    setProgress(15);
 
     try {
       const result = await convertDocumentMobile(selectedFile, targetFormat, (p) => {
@@ -99,12 +117,15 @@ export default function HomeScreen({ defaultFormat = 'XLSX' }) {
       });
 
       setConvertedResult(result);
-      Alert.alert('Konversi Berhasil', `Berkas berhasil dikonversi ke format ${targetFormat} (${result.sourceEngine || 'Placeboo API'})!`);
+      Alert.alert(
+        'Konversi Berhasil',
+        `Berkas berhasil dikonversi ke ${targetFormat} via ${result.sourceEngine || 'Placeboo'}!`
+      );
     } catch (err) {
       console.error('Convert document error:', err);
       Alert.alert(
         'Konversi Gagal',
-        `Terjadi kesalahan saat memproses konversi: ${err?.message || 'Gagal memproses dokumen.'}`
+        `Terjadi kendala saat memproses: ${err?.message || 'Gagal memproses dokumen.'}`
       );
     } finally {
       setIsConverting(false);
@@ -119,13 +140,8 @@ export default function HomeScreen({ defaultFormat = 'XLSX' }) {
           ? 'image/png'
           : targetFormat === 'JPG' || targetFormat === 'JPEG'
           ? 'image/jpeg'
-          : targetFormat === 'PDF'
-          ? 'application/pdf'
-          : targetFormat === 'XLSX'
-          ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-          : targetFormat === 'DOCX'
-          ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-          : 'text/plain');
+          : 'application/pdf');
+
       const success = await shareFileNative(convertedResult.uri, mime);
       if (!success) {
         Alert.alert('Informasi', 'Fitur penyimpanan berkas telah dibuka di sistem perangkat Anda.');
@@ -133,9 +149,10 @@ export default function HomeScreen({ defaultFormat = 'XLSX' }) {
     }
   };
 
-  const handleSelectPopularTool = (tool) => {
-    setTargetFormat(tool.format);
-    pickDocument();
+  const handleReset = () => {
+    setSelectedFile(null);
+    setConvertedResult(null);
+    setProgress(0);
   };
 
   return (
@@ -150,32 +167,88 @@ export default function HomeScreen({ defaultFormat = 'XLSX' }) {
           </View>
         </View>
         <Text style={styles.subtitle}>
-          Konverter Dokumen Multi-Format Cepat, Aman, &amp; Bebas Batas 50 MB.
+          Spesialis Konversi PDF ↔ Gambar Cepat, Tajam, &amp; Maks. 50 MB.
         </Text>
+      </View>
+
+      {/* Mode Switcher Segmented Tabs */}
+      <View style={styles.segmentContainer}>
+        <TouchableOpacity
+          style={[styles.segmentBtn, isPdfToImage && styles.segmentBtnActive]}
+          onPress={() => handleSwitchMode('pdf_to_image')}
+          activeOpacity={0.8}
+        >
+          <MaterialIcons
+            name="photo-library"
+            size={18}
+            color={isPdfToImage ? '#ffffff' : '#475569'}
+          />
+          <Text style={[styles.segmentBtnText, isPdfToImage && styles.segmentBtnTextActive]}>
+            PDF ke Gambar
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.segmentBtn, !isPdfToImage && styles.segmentBtnActive]}
+          onPress={() => handleSwitchMode('image_to_pdf')}
+          activeOpacity={0.8}
+        >
+          <MaterialIcons
+            name="picture-as-pdf"
+            size={18}
+            color={!isPdfToImage ? '#ffffff' : '#475569'}
+          />
+          <Text style={[styles.segmentBtnText, !isPdfToImage && styles.segmentBtnTextActive]}>
+            Gambar ke PDF
+          </Text>
+        </TouchableOpacity>
       </View>
 
       {/* Main Upload Card */}
       <View style={styles.card}>
-        <Text style={styles.cardHeader}>Unggah &amp; Konversi Berkas</Text>
+        <View style={styles.cardTitleRow}>
+          <Text style={styles.cardHeader}>
+            {isPdfToImage ? 'Konversi PDF ke Gambar' : 'Konversi Gambar ke PDF'}
+          </Text>
+          <View style={styles.modePill}>
+            <Text style={styles.modePillText}>
+              {isPdfToImage ? 'PDF → PNG/JPG' : 'IMG → PDF'}
+            </Text>
+          </View>
+        </View>
 
         {!selectedFile ? (
           <TouchableOpacity style={styles.dropzone} onPress={pickDocument} activeOpacity={0.8}>
-            <View style={styles.iconCircle}>
-              <MaterialIcons name="cloud-upload" size={36} color="#4f46e5" />
+            <View style={[styles.iconCircle, !isPdfToImage && styles.iconCircleAmber]}>
+              <MaterialIcons
+                name={isPdfToImage ? 'picture-as-pdf' : 'add-photo-alternate'}
+                size={34}
+                color={isPdfToImage ? '#4f46e5' : '#d97706'}
+              />
             </View>
-            <Text style={styles.dropzoneTitle}>Pilih Berkas dari HP</Text>
+            <Text style={styles.dropzoneTitle}>
+              {isPdfToImage ? 'Pilih Berkas PDF' : 'Pilih Berkas Gambar'}
+            </Text>
             <Text style={styles.dropzoneSubtitle}>
-              Mendukung PDF, Word, Excel, Gambar JPG/PNG, hingga Teks OCR (Maks. 50 MB)
+              {isPdfToImage
+                ? 'Ketuk untuk memilih berkas PDF dari HP (Maks. 50 MB)'
+                : 'Mendukung foto/gambar JPG, JPEG, PNG, WEBP (Maks. 50 MB)'}
             </Text>
           </TouchableOpacity>
         ) : (
           <View style={styles.fileSelectedBox}>
             <View style={styles.fileInfoRow}>
-              <View style={styles.fileIconBox}>
-                <MaterialIcons name="insert-drive-file" size={28} color="#4f46e5" />
+              <View style={[styles.fileIconBox, !isPdfToImage && styles.fileIconBoxAmber]}>
+                <MaterialIcons
+                  name={isPdfToImage ? 'picture-as-pdf' : 'image'}
+                  size={26}
+                  color={isPdfToImage ? '#4f46e5' : '#d97706'}
+                />
               </View>
               <View style={styles.fileTextCol}>
-                <Text style={styles.fileName} numberOfLines={1}>{selectedFile.name}</Text>
+                <Text style={styles.fileName} numberOfLines={1}>
+                  {selectedFile.name}
+                </Text>
                 <Text style={styles.fileSize}>{formatBytes(selectedFile.size || 0)}</Text>
               </View>
               <TouchableOpacity onPress={() => setSelectedFile(null)}>
@@ -190,31 +263,64 @@ export default function HomeScreen({ defaultFormat = 'XLSX' }) {
         )}
 
         {/* Format Selector */}
-        <View style={styles.formatSection}>
-          <Text style={styles.labelSection}>Konversi Ke Format:</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.formatScroll}>
-            {formats.map((fmt) => {
-              const active = targetFormat === fmt.value;
-              return (
-                <TouchableOpacity
-                  key={fmt.value}
-                  style={[styles.formatChip, active && styles.formatChipActive]}
-                  onPress={() => setTargetFormat(fmt.value)}
-                  activeOpacity={0.7}
+        {isPdfToImage ? (
+          <View style={styles.formatSection}>
+            <Text style={styles.labelSection}>Pilih Format Gambar Output:</Text>
+            <View style={styles.formatRow}>
+              <TouchableOpacity
+                style={[styles.formatChip, targetFormat === 'PNG' && styles.formatChipActive]}
+                onPress={() => setTargetFormat('PNG')}
+                activeOpacity={0.7}
+              >
+                <MaterialIcons
+                  name="image"
+                  size={16}
+                  color={targetFormat === 'PNG' ? '#ffffff' : '#64748b'}
+                />
+                <Text
+                  style={[
+                    styles.formatChipText,
+                    targetFormat === 'PNG' && styles.formatChipTextActive
+                  ]}
                 >
-                  <MaterialIcons
-                    name={fmt.icon}
-                    size={16}
-                    color={active ? '#ffffff' : '#64748b'}
-                  />
-                  <Text style={[styles.formatChipText, active && styles.formatChipTextActive]}>
-                    {fmt.value}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </ScrollView>
-        </View>
+                  PNG (Resolusi Tinggi)
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.formatChip, targetFormat === 'JPG' && styles.formatChipActive]}
+                onPress={() => setTargetFormat('JPG')}
+                activeOpacity={0.7}
+              >
+                <MaterialIcons
+                  name="photo"
+                  size={16}
+                  color={targetFormat === 'JPG' ? '#ffffff' : '#64748b'}
+                />
+                <Text
+                  style={[
+                    styles.formatChipText,
+                    targetFormat === 'JPG' && styles.formatChipTextActive
+                  ]}
+                >
+                  JPG (Ukuran Ringan)
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        ) : (
+          <View style={styles.formatSection}>
+            <Text style={styles.labelSection}>Format Output Terpilih:</Text>
+            <View style={styles.formatRow}>
+              <View style={[styles.formatChip, styles.formatChipActive]}>
+                <MaterialIcons name="picture-as-pdf" size={16} color="#ffffff" />
+                <Text style={[styles.formatChipText, styles.formatChipTextActive]}>
+                  Dokumen PDF (.pdf)
+                </Text>
+              </View>
+            </View>
+          </View>
+        )}
 
         {/* Progress Bar during conversion */}
         {isConverting && (
@@ -233,16 +339,23 @@ export default function HomeScreen({ defaultFormat = 'XLSX' }) {
         {convertedResult && (
           <View style={styles.successBox}>
             <View style={styles.successIconBox}>
-              <MaterialIcons name="check-circle" size={24} color="#10b981" />
+              <MaterialIcons name="check-circle" size={26} color="#10b981" />
             </View>
             <View style={styles.successTextCol}>
-              <Text style={styles.successTitle}>Konversi Selesai!</Text>
-              <Text style={styles.successFileName} numberOfLines={1}>{convertedResult.fileName}</Text>
+              <Text style={styles.successTitle}>Konversi Berhasil!</Text>
+              <Text style={styles.successFileName} numberOfLines={1}>
+                {convertedResult.fileName}
+              </Text>
             </View>
-            <TouchableOpacity style={styles.btnShare} onPress={handleShare}>
-              <MaterialIcons name="share" size={18} color="#ffffff" />
-              <Text style={styles.btnShareText}>Buka / Bagikan</Text>
-            </TouchableOpacity>
+            <View style={styles.successActionRow}>
+              <TouchableOpacity style={styles.btnShare} onPress={handleShare}>
+                <MaterialIcons name="share" size={18} color="#ffffff" />
+                <Text style={styles.btnShareText}>Buka / Bagikan</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.btnResetSmall} onPress={handleReset}>
+                <MaterialIcons name="refresh" size={16} color="#475569" />
+              </TouchableOpacity>
+            </View>
           </View>
         )}
 
@@ -259,31 +372,64 @@ export default function HomeScreen({ defaultFormat = 'XLSX' }) {
             ) : (
               <>
                 <MaterialIcons name="bolt" size={20} color="#ffffff" />
-                <Text style={styles.btnConvertText}>Mulai Konversi Sekarang</Text>
+                <Text style={styles.btnConvertText}>
+                  {isPdfToImage ? 'Mulai Konversi PDF ke Gambar' : 'Mulai Konversi Gambar ke PDF'}
+                </Text>
               </>
             )}
           </TouchableOpacity>
         )}
       </View>
 
-      {/* Popular Tools Section */}
-      <View style={styles.popularSection}>
-        <Text style={styles.popularHeading}>Alat Konversi Terpopuler</Text>
-        <View style={styles.toolsGrid}>
-          {popularTools.map((tool, idx) => (
-            <TouchableOpacity
-              key={idx}
-              style={styles.toolCard}
-              onPress={() => handleSelectPopularTool(tool)}
-              activeOpacity={0.7}
-            >
-              <View style={[styles.toolIconBox, { backgroundColor: `${tool.color}15` }]}>
-                <MaterialIcons name={tool.icon} size={24} color={tool.color} />
-              </View>
-              <Text style={styles.toolTag}>{tool.tag}</Text>
-              <Text style={styles.toolTitle}>{tool.title}</Text>
-            </TouchableOpacity>
-          ))}
+      {/* Available Conversion Modes Quick Grid */}
+      <View style={styles.modesSection}>
+        <Text style={styles.modesHeading}>Alat Konversi Mobile</Text>
+        <View style={styles.modesGrid}>
+          {/* Card 1: PDF ke Gambar */}
+          <TouchableOpacity
+            style={[styles.modeCard, isPdfToImage && styles.modeCardActive]}
+            onPress={() => handleSwitchMode('pdf_to_image')}
+            activeOpacity={0.8}
+          >
+            <View style={[styles.modeCardIconBox, { backgroundColor: '#e0e7ff' }]}>
+              <MaterialIcons name="photo-library" size={24} color="#4f46e5" />
+            </View>
+            <View style={styles.modeCardHeaderRow}>
+              <Text style={styles.modeCardTag}>PDF → PNG/JPG</Text>
+              {isPdfToImage && (
+                <View style={styles.activeIndicator}>
+                  <Text style={styles.activeIndicatorText}>Aktif</Text>
+                </View>
+              )}
+            </View>
+            <Text style={styles.modeCardTitle}>PDF ke Gambar</Text>
+            <Text style={styles.modeCardDesc}>
+              Ekstrak dokumen PDF menjadi berkas gambar beresolusi tinggi.
+            </Text>
+          </TouchableOpacity>
+
+          {/* Card 2: Gambar ke PDF */}
+          <TouchableOpacity
+            style={[styles.modeCard, !isPdfToImage && styles.modeCardActive]}
+            onPress={() => handleSwitchMode('image_to_pdf')}
+            activeOpacity={0.8}
+          >
+            <View style={[styles.modeCardIconBox, { backgroundColor: '#fef3c7' }]}>
+              <MaterialIcons name="picture-as-pdf" size={24} color="#d97706" />
+            </View>
+            <View style={styles.modeCardHeaderRow}>
+              <Text style={styles.modeCardTag}>IMG → PDF</Text>
+              {!isPdfToImage && (
+                <View style={[styles.activeIndicator, { backgroundColor: '#fef3c7', borderColor: '#fde68a' }]}>
+                  <Text style={[styles.activeIndicatorText, { color: '#b45309' }]}>Aktif</Text>
+                </View>
+              )}
+            </View>
+            <Text style={styles.modeCardTitle}>Gambar ke PDF</Text>
+            <Text style={styles.modeCardDesc}>
+              Kemas foto atau gambar menjadi berkas PDF standar siap cetak.
+            </Text>
+          </TouchableOpacity>
         </View>
       </View>
 
@@ -308,7 +454,7 @@ const styles = StyleSheet.create({
     paddingBottom: 40
   },
   header: {
-    marginBottom: 16
+    marginBottom: 14
   },
   brandRow: {
     flexDirection: 'row',
@@ -343,6 +489,39 @@ const styles = StyleSheet.create({
     marginTop: 4,
     lineHeight: 18
   },
+  segmentContainer: {
+    flexDirection: 'row',
+    backgroundColor: '#e2e8f0',
+    borderRadius: 12,
+    padding: 4,
+    marginBottom: 16
+  },
+  segmentBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    borderRadius: 9,
+    gap: 6
+  },
+  segmentBtnActive: {
+    backgroundColor: '#4f46e5',
+    shadowColor: '#4f46e5',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3,
+    elevation: 2
+  },
+  segmentBtnText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#475569'
+  },
+  segmentBtnTextActive: {
+    color: '#ffffff',
+    fontWeight: '700'
+  },
   card: {
     backgroundColor: '#ffffff',
     borderRadius: 16,
@@ -356,11 +535,27 @@ const styles = StyleSheet.create({
     borderColor: '#e2e8f0',
     marginBottom: 20
   },
+  cardTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 14
+  },
   cardHeader: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#1e293b',
-    marginBottom: 14
+    color: '#1e293b'
+  },
+  modePill: {
+    backgroundColor: '#e0e7ff',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6
+  },
+  modePillText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#4338ca'
   },
   dropzone: {
     borderWidth: 2,
@@ -379,6 +574,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 10
+  },
+  iconCircleAmber: {
+    backgroundColor: '#fef3c7'
   },
   dropzoneTitle: {
     fontSize: 16,
@@ -412,6 +610,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginRight: 10
   },
+  fileIconBoxAmber: {
+    backgroundColor: '#fef3c7'
+  },
   fileTextCol: {
     flex: 1
   },
@@ -443,18 +644,19 @@ const styles = StyleSheet.create({
     color: '#475569',
     marginBottom: 8
   },
-  formatScroll: {
-    flexDirection: 'row'
+  formatRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8
   },
   formatChip: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
     borderRadius: 8,
     backgroundColor: '#f1f5f9',
-    marginRight: 8,
     borderWidth: 1,
     borderColor: '#e2e8f0'
   },
@@ -500,44 +702,57 @@ const styles = StyleSheet.create({
     borderRadius: 4
   },
   successBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
     backgroundColor: '#ecfdf5',
-    padding: 12,
-    borderRadius: 10,
+    padding: 14,
+    borderRadius: 12,
     marginTop: 16,
     borderWidth: 1,
     borderColor: '#a7f3d0'
   },
   successIconBox: {
-    marginRight: 8
+    marginBottom: 6
   },
   successTextCol: {
-    flex: 1
+    marginBottom: 10
   },
   successTitle: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '700',
     color: '#065f46'
   },
   successFileName: {
-    fontSize: 11,
+    fontSize: 12,
     color: '#047857',
-    marginTop: 1
+    marginTop: 2
   },
-  btnShare: {
+  successActionRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 8
+  },
+  btnShare: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
     backgroundColor: '#10b981',
-    paddingHorizontal: 12,
-    paddingVertical: 7,
+    paddingVertical: 10,
     borderRadius: 8
   },
   btnShareText: {
     color: '#ffffff',
-    fontSize: 12,
-    fontWeight: '600'
+    fontSize: 13,
+    fontWeight: '700'
+  },
+  btnResetSmall: {
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    padding: 10,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center'
   },
   btnConvert: {
     flexDirection: 'row',
@@ -562,26 +777,23 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '700'
   },
-  popularSection: {
+  modesSection: {
     marginBottom: 20
   },
-  popularHeading: {
+  modesHeading: {
     fontSize: 16,
     fontWeight: '700',
     color: '#0f172a',
     marginBottom: 12
   },
-  toolsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10
+  modesGrid: {
+    gap: 12
   },
-  toolCard: {
-    width: '48%',
+  modeCard: {
     backgroundColor: '#ffffff',
-    borderRadius: 12,
-    padding: 14,
-    borderWidth: 1,
+    borderRadius: 14,
+    padding: 16,
+    borderWidth: 1.5,
     borderColor: '#e2e8f0',
     shadowColor: '#0f172a',
     shadowOffset: { width: 0, height: 1 },
@@ -589,24 +801,52 @@ const styles = StyleSheet.create({
     shadowRadius: 3,
     elevation: 1
   },
-  toolIconBox: {
-    width: 40,
-    height: 40,
-    borderRadius: 8,
+  modeCardActive: {
+    borderColor: '#4f46e5',
+    backgroundColor: '#fcfdff'
+  },
+  modeCardIconBox: {
+    width: 44,
+    height: 44,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 8
+    marginBottom: 10
   },
-  toolTag: {
+  modeCardHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 4
+  },
+  modeCardTag: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#64748b'
+  },
+  activeIndicator: {
+    backgroundColor: '#e0e7ff',
+    borderWidth: 1,
+    borderColor: '#c7d2fe',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 10
+  },
+  activeIndicatorText: {
     fontSize: 10,
     fontWeight: '700',
-    color: '#64748b',
-    marginBottom: 2
+    color: '#4338ca'
   },
-  toolTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#1e293b'
+  modeCardTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#1e293b',
+    marginBottom: 4
+  },
+  modeCardDesc: {
+    fontSize: 12,
+    color: '#64748b',
+    lineHeight: 18
   },
   securityBox: {
     flexDirection: 'row',

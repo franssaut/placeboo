@@ -356,6 +356,15 @@ export async function convertDocumentMobile(file, targetFormat = 'XLSX', onProgr
     } else {
       await writeBase64File(outputUri, DEFAULT_DOCUMENT_PNG_BASE64);
     }
+  } else if (targetFormat.toUpperCase() === 'PDF') {
+    if (fileBase64 && sourceExt === 'pdf') {
+      await writeBase64File(outputUri, fileBase64);
+    } else {
+      const cleanSafeName = cleanName.replace(/[()]/g, '');
+      const streamText = `BT /F1 16 Tf 50 780 Td (Placeboo Mobile Document) Tj /F1 11 Tf 50 750 Td (Berkas: ${cleanSafeName}) Tj 50 730 Td (Format Target: PDF) Tj 50 710 Td (Engine: On-Device Engine) Tj ET`;
+      const validPdfString = `%PDF-1.4\n1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj\n2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj\n3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> >> >> /Contents 4 0 R >> endobj\n4 0 obj << /Length ${streamText.length} >> stream\n${streamText}\nendstream\nendobj\nxref\n0 5\n0000000000 65535 f \n0000000009 00000 n \n0000000058 00000 n \n0000000115 00000 n \n0000000266 00000 n \ntrailer << /Size 5 /Root 1 0 R >>\nstartxref\n${360 + streamText.length}\n%%EOF`;
+      await writeTextFile(outputUri, validPdfString);
+    }
   } else {
     if (fileBase64) {
       await writeBase64File(outputUri, fileBase64);

@@ -11,16 +11,9 @@ import {
 import { StatusBar } from 'expo-status-bar';
 import { MaterialIcons } from '@expo/vector-icons';
 import HomeScreen from './src/screens/HomeScreen';
-import CatalogScreen from './src/screens/CatalogScreen';
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState('home');
-  const [preselectedFormat, setPreselectedFormat] = useState('XLSX');
-
-  const handleSelectToolFromCatalog = (tool) => {
-    setPreselectedFormat(tool.format || 'XLSX');
-    setActiveTab('home');
-  };
+  const [activeMode, setActiveMode] = useState('pdf_to_image'); // 'pdf_to_image' | 'image_to_pdf'
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -28,52 +21,48 @@ export default function App() {
 
       {/* Main Screen Content */}
       <View style={styles.content}>
-        {activeTab === 'home' ? (
-          <HomeScreen defaultFormat={preselectedFormat} />
-        ) : (
-          <CatalogScreen onSelectTool={handleSelectToolFromCatalog} />
-        )}
+        <HomeScreen mode={activeMode} onModeChange={setActiveMode} />
       </View>
 
       {/* Bottom Navigation Bar */}
       <View style={styles.bottomNav}>
         <TouchableOpacity
           style={styles.navItem}
-          onPress={() => setActiveTab('home')}
+          onPress={() => setActiveMode('pdf_to_image')}
           activeOpacity={0.7}
         >
           <MaterialIcons
-            name="transform"
+            name="photo-library"
             size={24}
-            color={activeTab === 'home' ? '#4f46e5' : '#94a3b8'}
+            color={activeMode === 'pdf_to_image' ? '#4f46e5' : '#94a3b8'}
           />
           <Text
             style={[
               styles.navLabel,
-              activeTab === 'home' && styles.navLabelActive
+              activeMode === 'pdf_to_image' && styles.navLabelActive
             ]}
           >
-            Konversi
+            PDF ke Gambar
           </Text>
         </TouchableOpacity>
 
         <TouchableOpacity
           style={styles.navItem}
-          onPress={() => setActiveTab('catalog')}
+          onPress={() => setActiveMode('image_to_pdf')}
           activeOpacity={0.7}
         >
           <MaterialIcons
-            name="grid-view"
+            name="picture-as-pdf"
             size={24}
-            color={activeTab === 'catalog' ? '#4f46e5' : '#94a3b8'}
+            color={activeMode === 'image_to_pdf' ? '#4f46e5' : '#94a3b8'}
           />
           <Text
             style={[
               styles.navLabel,
-              activeTab === 'catalog' && styles.navLabelActive
+              activeMode === 'image_to_pdf' && styles.navLabelActive
             ]}
           >
-            Semua Alat
+            Gambar ke PDF
           </Text>
         </TouchableOpacity>
       </View>
@@ -92,7 +81,7 @@ const styles = StyleSheet.create({
   },
   bottomNav: {
     flexDirection: 'row',
-    height: 60,
+    height: 64,
     backgroundColor: '#ffffff',
     borderTopWidth: 1,
     borderTopColor: '#e2e8f0',
@@ -102,7 +91,8 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: -2 },
     shadowOpacity: 0.04,
     shadowRadius: 4,
-    elevation: 8
+    elevation: 8,
+    paddingBottom: Platform.OS === 'ios' ? 10 : 0
   },
   navItem: {
     alignItems: 'center',
@@ -114,7 +104,7 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '600',
     color: '#94a3b8',
-    marginTop: 2
+    marginTop: 3
   },
   navLabelActive: {
     color: '#4f46e5',
