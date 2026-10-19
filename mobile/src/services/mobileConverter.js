@@ -27,10 +27,10 @@ export function formatBytes(bytes) {
  */
 function getStorageDirectory() {
   const dir =
-    FileSystemLegacy?.documentDirectory ||
     FileSystemLegacy?.cacheDirectory ||
-    (FileSystemNew?.Paths?.document && FileSystemNew.Paths.document.uri) ||
+    FileSystemLegacy?.documentDirectory ||
     (FileSystemNew?.Paths?.cache && FileSystemNew.Paths.cache.uri) ||
+    (FileSystemNew?.Paths?.document && FileSystemNew.Paths.document.uri) ||
     '';
   if (!dir) {
     throw new Error('Direktori penyimpanan perangkat tidak dapat diakses.');
@@ -39,34 +39,116 @@ function getStorageDirectory() {
 }
 
 /**
- * Reads any file as Base64 string safely
+ * Universal Base64 reader for any mobile URI (file://, content://, cache)
+ * Uses native fetch + FileReader to bypass Android Scoped Storage restrictions
  */
 async function readFileAsBase64(uri) {
+  // Method 1: React Native Native Networking fetch + FileReader (most reliable for DocumentPicker on Android)
+  try {
+    const base64 = await new Promise((resolve, reject) => {
+      fetch(uri)
+        .then((res) => {
+          if (!res.ok && res.status !== 0) {
+            throw new Error(`Fetch status: ${res.status}`);
+          }
+          return res.blob();
+        })
+        .then((blob) => {
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            if (typeof reader.result === 'string') {
+              const resStr = reader.result;
+              const b64 = resStr.includes(',') ? resStr.split(',')[1] : resStr;
+              resolve(b64);
+            } else {
+              resolve('');
+            }
+          };
+          reader.onerror = (e) => reject(e);
+          reader.readAsDataURL(blob);
+        })
+        .catch(reject);
+    });
+
+    if (base64 && base64.length > 0) {
+      return base64;
+    }
+  } catch (fetchErr) {
+    console.warn('[readFileAsBase64 fetch method warn]:', fetchErr?.message);
+  }
+
+  // Method 2: Modern expo-file-system File class
+  try {
+    if (FileSystemNew && FileSystemNew.File) {
+      const f = new FileSystemNew.File(uri);
+      const buf = await f.arrayBuffer();
+      if (buf && buf.byteLength > 0) {
+        const bytes = new Uint8Array(buf);
+        let binary = '';
+        const len = bytes.byteLength;
+        for (let i = 0; i < len; i++) {
+          binary += String.fromCharCode(bytes[i]);
+        }
+        return btoa(binary);
+      }
+    }
+  } catch (newFsErr) {
+    console.warn('[readFileAsBase64 modern FS warn]:', newFsErr?.message);
+  }
+
+  // Method 3: Legacy readAsStringAsync
   try {
     if (FileSystemLegacy && typeof FileSystemLegacy.readAsStringAsync === 'function') {
       return await FileSystemLegacy.readAsStringAsync(uri, {
         encoding: FileSystemLegacy.EncodingType?.Base64 || 'base64'
       });
     }
-    if (FileSystemNew && FileSystemNew.File) {
-      const f = new FileSystemNew.File(uri);
-      const buf = await f.arrayBuffer();
-      const bytes = new Uint8Array(buf);
-      let binary = '';
-      const len = bytes.byteLength;
-      for (let i = 0; i < len; i++) {
-        binary += String.fromCharCode(bytes[i]);
-      }
-      return btoa(binary);
-    }
-  } catch (err) {
-    console.warn('[readFileAsBase64 Warn]:', err?.message);
+  } catch (legacyErr) {
+    console.warn('[readFileAsBase64 legacy FS warn]:', legacyErr?.message);
   }
+
   return '';
 }
 
 /**
- * Writes binary Base64 file with multi-API fallback
+ * Universal text reader
+ */
+async function readTextFile(uri) {
+  // Method 1: React Native native fetch
+  try {
+    const res = await fetch(uri);
+    const text = await res.text();
+    if (text) return text;
+  } catch (e) {
+    console.warn('[readTextFile fetch warn]:', e?.message);
+  }
+
+  // Method 2: Modern expo-file-system
+  try {
+    if (FileSystemNew && FileSystemNew.File) {
+      const file = new FileSystemNew.File(uri);
+      return await file.text();
+    }
+  } catch (e) {
+    console.warn('[readTextFile modern FS warn]:', e?.message);
+  }
+
+  // Method 3: Legacy FileSystem
+  try {
+    if (FileSystemLegacy && typeof FileSystemLegacy.readAsStringAsync === 'function') {
+      return await FileSystemLegacy.readAsStringAsync(uri, {
+        encoding: FileSystemLegacy.EncodingType?.UTF8 || 'utf8'
+      });
+    }
+  } catch (err) {
+    console.warn('[readTextFile legacy FS warn]:', err?.message);
+  }
+
+  return '';
+}
+
+/**
+ * Writes binary Base64 file safely to app's cache directory
  */
 async function writeBase64File(uri, base64) {
   if (FileSystemLegacy && typeof FileSystemLegacy.writeAsStringAsync === 'function') {
@@ -84,7 +166,7 @@ async function writeBase64File(uri, base64) {
 }
 
 /**
- * Writes text file with multi-API fallback
+ * Writes text file safely
  */
 async function writeTextFile(uri, text) {
   if (FileSystemLegacy && typeof FileSystemLegacy.writeAsStringAsync === 'function') {
@@ -99,43 +181,6 @@ async function writeTextFile(uri, text) {
     return;
   }
   throw new Error('Sistem berkas tidak mendukung penulisan teks.');
-}
-
-/**
- * Reads text content with multi-API fallback
- */
-async function readTextFile(uri) {
-  try {
-    if (FileSystemLegacy && typeof FileSystemLegacy.readAsStringAsync === 'function') {
-      return await FileSystemLegacy.readAsStringAsync(uri, {
-        encoding: FileSystemLegacy.EncodingType?.UTF8 || 'utf8'
-      });
-    }
-    if (FileSystemNew && FileSystemNew.File) {
-      const file = new FileSystemNew.File(uri);
-      return await file.text();
-    }
-  } catch (err) {
-    console.warn('[readTextFile Warn]:', err?.message);
-  }
-  return '';
-}
-
-/**
- * Copies file safely with multi-API fallback
- */
-async function copyFile(fromUri, toUri) {
-  if (FileSystemLegacy && typeof FileSystemLegacy.copyAsync === 'function') {
-    await FileSystemLegacy.copyAsync({ from: fromUri, to: toUri });
-    return;
-  }
-  if (FileSystemNew && FileSystemNew.File) {
-    const src = new FileSystemNew.File(fromUri);
-    const dest = new FileSystemNew.File(toUri);
-    await src.copy(dest);
-    return;
-  }
-  throw new Error('Sistem berkas tidak mendukung penyalinan berkas.');
 }
 
 // Helper to parse values for Excel cells
@@ -191,56 +236,58 @@ export async function convertDocumentMobile(file, targetFormat = 'XLSX', onProgr
   onProgress(15);
 
   // ----------------------------------------------------
-  // STEP 1: ATTEMPT WEBSITE API CONVERSION (CLOUD ENGINE)
+  // STEP 1: READ FILE AS BASE64 (UNIVERSAL)
+  // ----------------------------------------------------
+  onProgress(25);
+  const fileBase64 = await readFileAsBase64(file.uri);
+
+  // ----------------------------------------------------
+  // STEP 2: ATTEMPT WEBSITE API CONVERSION (CLOUD ENGINE)
   // ----------------------------------------------------
   let apiSuccess = false;
-  try {
-    onProgress(25);
-    const fileBase64 = await readFileAsBase64(file.uri);
 
-    if (fileBase64 && fileBase64.length > 0) {
-      onProgress(40);
+  if (fileBase64 && fileBase64.length > 0) {
+    onProgress(45);
 
-      // Try local network API first (fastest on Wi-Fi), then cloud website API
-      const endpoints = [PLACEBOO_LOCAL_API_URL, PLACEBOO_API_URL];
+    // Try local network API first (fastest on Wi-Fi), then cloud website API
+    const endpoints = [PLACEBOO_LOCAL_API_URL, PLACEBOO_API_URL];
 
-      for (const endpoint of endpoints) {
-        try {
-          const controller = new AbortController();
-          const timer = setTimeout(() => controller.abort(), 6000); // 6s fast timeout
+    for (const endpoint of endpoints) {
+      try {
+        console.log(`[Connecting to API: ${endpoint}]`);
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 8000); // 8s timeout
 
-          const resp = await fetch(endpoint, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Accept': 'application/json'
-            },
-            body: JSON.stringify({
-              fileName: file.name,
-              fileBase64,
-              targetFormat,
-              sourceFormat: sourceExt
-            }),
-            signal: controller.signal
-          });
-          clearTimeout(timer);
+        const resp = await fetch(endpoint, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+          },
+          body: JSON.stringify({
+            fileName: file.name,
+            fileBase64,
+            targetFormat,
+            sourceFormat: sourceExt
+          }),
+          signal: controller.signal
+        });
+        clearTimeout(timer);
 
-          if (resp.ok) {
-            const data = await resp.json();
-            if (data.success && data.fileBase64) {
-              onProgress(85);
-              await writeBase64File(outputUri, data.fileBase64);
-              apiSuccess = true;
-              break;
-            }
+        if (resp.ok) {
+          const data = await resp.json();
+          if (data.success && data.fileBase64) {
+            onProgress(85);
+            await writeBase64File(outputUri, data.fileBase64);
+            apiSuccess = true;
+            console.log(`[API Conversion Success via ${endpoint}]`);
+            break;
           }
-        } catch (fetchErr) {
-          console.warn(`[API Attempt ${endpoint} Failed]:`, fetchErr?.message);
         }
+      } catch (fetchErr) {
+        console.warn(`[API Attempt ${endpoint} Failed]:`, fetchErr?.message);
       }
     }
-  } catch (cloudErr) {
-    console.warn('[Website API Error, falling back to on-device]:', cloudErr?.message);
   }
 
   if (apiSuccess) {
@@ -254,7 +301,7 @@ export async function convertDocumentMobile(file, targetFormat = 'XLSX', onProgr
   }
 
   // ----------------------------------------------------
-  // STEP 2: ON-DEVICE FALLBACK ENGINE
+  // STEP 3: ON-DEVICE FALLBACK ENGINE
   // ----------------------------------------------------
   console.log('[Running On-Device Fallback Conversion Engine]');
   onProgress(60);
@@ -305,16 +352,15 @@ export async function convertDocumentMobile(file, targetFormat = 'XLSX', onProgr
     }
     await writeTextFile(outputUri, rawText);
   } else if (targetFormat.toUpperCase() === 'PNG' || targetFormat.toUpperCase() === 'JPG') {
-    const isImage = ['png', 'jpg', 'jpeg', 'webp', 'bmp', 'gif'].includes(sourceExt);
-    if (isImage) {
-      await copyFile(file.uri, outputUri);
+    if (fileBase64 && ['png', 'jpg', 'jpeg', 'webp', 'bmp', 'gif'].includes(sourceExt)) {
+      await writeBase64File(outputUri, fileBase64);
     } else {
       await writeBase64File(outputUri, VALID_PNG_BASE64);
     }
   } else {
-    try {
-      await copyFile(file.uri, outputUri);
-    } catch {
+    if (fileBase64) {
+      await writeBase64File(outputUri, fileBase64);
+    } else {
       await writeTextFile(outputUri, `[Placeboo Dokumen]\nBerkas: ${file.name}\nFormat: ${targetFormat}\nStatus: Berhasil`);
     }
   }
