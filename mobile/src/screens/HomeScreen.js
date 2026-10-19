@@ -370,7 +370,7 @@ export default function HomeScreen({ mode = 'pdf_to_image', onModeChange }) {
         : `${res.count} lembar foto terpilih berhasil disimpan langsung ke Galeri Foto ponsel Anda!\n\nAnda dapat membuka WhatsApp sekarang dan melampirkan foto tersebut langsung dari album Galeri.`;
 
       Alert.alert(
-        'Berhasil Disimpan ke Galeri!',
+        'Berhasil Di-download!',
         msg,
         [
           { text: 'Tutup', style: 'cancel' },
@@ -381,7 +381,40 @@ export default function HomeScreen({ mode = 'pdf_to_image', onModeChange }) {
         ]
       );
     } else if (res.error && !res.error.includes('dibatalkan')) {
-      Alert.alert('Gagal Menyimpan ke Galeri', res.error);
+      Alert.alert('Gagal Men-download', res.error);
+    }
+  };
+
+  const handleDownloadSinglePage = async (pageIdx) => {
+    if (!convertedResult) return;
+    const pageItem =
+      isPdfToImage && convertedResult.pages && convertedResult.pages[pageIdx]
+        ? convertedResult.pages[pageIdx]
+        : { uri: convertedResult.uri, pageNumber: pageIdx + 1 };
+
+    setIsSavingStorage(true);
+    const cleanBaseName = selectedPdf?.name
+      ? selectedPdf.name.replace(/\.[^/.]+$/, '')
+      : 'dokumen_placeboo';
+
+    const res = await saveImagesDirectlyToGallery([pageItem], cleanBaseName);
+    setIsSavingStorage(false);
+
+    if (res.success) {
+      const pageNum = pageItem.pageNumber || pageIdx + 1;
+      Alert.alert(
+        'Berhasil Di-download!',
+        `Gambar Halaman ${pageNum} berhasil di-download dan disimpan ke Galeri ponsel Anda!`,
+        [
+          { text: 'Tutup', style: 'cancel' },
+          {
+            text: 'Buka WhatsApp',
+            onPress: () => Linking.openURL('whatsapp://').catch(() => {})
+          }
+        ]
+      );
+    } else if (res.error && !res.error.includes('dibatalkan')) {
+      Alert.alert('Gagal Men-download Halaman', res.error);
     }
   };
 
@@ -750,7 +783,7 @@ export default function HomeScreen({ mode = 'pdf_to_image', onModeChange }) {
 
             {isPdfToImage && convertedResult.pages && convertedResult.pages.length > 1 ? (
               <View style={styles.multiShareContainer}>
-                {/* 1. Tombol Simpan Halaman Terpilih di Galeri */}
+                {/* 1. Tombol Download Halaman Terpilih di Galeri */}
                 <TouchableOpacity
                   style={[
                     styles.btnSaveAllStorage,
@@ -763,26 +796,26 @@ export default function HomeScreen({ mode = 'pdf_to_image', onModeChange }) {
                   {isSavingStorage ? (
                     <ActivityIndicator size="small" color="#ffffff" />
                   ) : (
-                    <MaterialIcons name="photo-library" size={26} color="#ffffff" />
+                    <MaterialIcons name="file-download" size={26} color="#ffffff" />
                   )}
                   <View style={styles.btnSaveAllStorageContent}>
                     <Text style={styles.btnSaveAllStorageTitle}>
                       {selectedPageIndices.length === convertedResult.pages.length
-                        ? `Simpan Semua ${convertedResult.pages.length} File di Galeri`
+                        ? `Download Semua (${convertedResult.pages.length}) File Halaman`
                         : selectedPageIndices.length > 0
-                        ? `Simpan ${selectedPageIndices.length} Halaman Terpilih di Galeri`
-                        : 'Pilih Halaman untuk Disimpan di Galeri'}
+                        ? `Download (${selectedPageIndices.length}) Halaman Terpilih`
+                        : 'Pilih Halaman untuk Di-download'}
                     </Text>
                     <Text style={styles.btnSaveAllStorageSub}>
                       {selectedPageIndices.length > 0
-                        ? `Simpan ${
+                        ? `Download & simpan ${
                             selectedPageIndices.length === convertedResult.pages.length
                               ? 'seluruh lembar'
                               : `Hal. ${selectedPageIndices
                                   .map((i) => convertedResult.pages[i]?.pageNumber || i + 1)
                                   .join(', ')}`
                           } langsung ke Galeri HP (tanpa ribet pilih folder)`
-                        : 'Centang halaman di bawah yang ingin Anda simpan ke galeri'}
+                        : 'Centang halaman di bawah yang ingin Anda download ke galeri'}
                     </Text>
                   </View>
                 </TouchableOpacity>
@@ -961,17 +994,30 @@ export default function HomeScreen({ mode = 'pdf_to_image', onModeChange }) {
                             </View>
                           </TouchableOpacity>
 
-                          {/* Tombol Cepat Kirim Halaman Ini Saja */}
-                          <TouchableOpacity
-                            style={styles.btnShareCard}
-                            onPress={() => handleSharePage(idx)}
-                            activeOpacity={0.8}
-                          >
-                            <FontAwesome name="whatsapp" size={13} color="#ffffff" />
-                            <Text style={styles.btnShareCardText}>
-                              Kirim Hal. {p.pageNumber}
-                            </Text>
-                          </TouchableOpacity>
+                          {/* Tombol Aksi Download & Kirim WhatsApp untuk Halaman Ini */}
+                          <View style={styles.cardActionRow}>
+                            <TouchableOpacity
+                              style={styles.btnDownloadCard}
+                              onPress={() => handleDownloadSinglePage(idx)}
+                              activeOpacity={0.8}
+                            >
+                              <MaterialIcons name="file-download" size={13} color="#ffffff" />
+                              <Text style={styles.btnDownloadCardText}>
+                                Unduh
+                              </Text>
+                            </TouchableOpacity>
+
+                            <TouchableOpacity
+                              style={styles.btnShareCard}
+                              onPress={() => handleSharePage(idx)}
+                              activeOpacity={0.8}
+                            >
+                              <FontAwesome name="whatsapp" size={13} color="#ffffff" />
+                              <Text style={styles.btnShareCardText}>
+                                WA
+                              </Text>
+                            </TouchableOpacity>
+                          </View>
                         </View>
                       );
                     })}
@@ -996,14 +1042,14 @@ export default function HomeScreen({ mode = 'pdf_to_image', onModeChange }) {
                     {isSavingStorage ? (
                       <ActivityIndicator size="small" color="#ffffff" />
                     ) : (
-                      <MaterialIcons name="photo-library" size={24} color="#ffffff" />
+                      <MaterialIcons name="file-download" size={24} color="#ffffff" />
                     )}
                     <View style={styles.btnSaveAllStorageContent}>
                       <Text style={styles.btnSaveAllStorageTitle}>
-                        Simpan Langsung File di Galeri
+                        Download / Simpan Gambar di Galeri
                       </Text>
                       <Text style={styles.btnSaveAllStorageSub}>
-                        Simpan foto langsung ke Galeri Foto HP Anda
+                        Download foto dokumen langsung ke Galeri Foto HP Anda
                       </Text>
                     </View>
                   </TouchableOpacity>
@@ -1773,7 +1819,7 @@ const styles = StyleSheet.create({
     paddingVertical: 4
   },
   pageCard: {
-    width: 126,
+    width: 136,
     marginRight: 10,
     backgroundColor: '#ffffff',
     borderWidth: 1.5,
@@ -1861,19 +1907,41 @@ const styles = StyleSheet.create({
   pageSelectionLabelTextActive: {
     color: '#15803d'
   },
-  btnShareCard: {
+  cardActionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
     width: '100%',
+    marginTop: 2
+  },
+  btnDownloadCard: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 4,
+    gap: 2,
+    backgroundColor: '#0284c7',
+    paddingVertical: 7,
+    borderRadius: 6
+  },
+  btnDownloadCardText: {
+    color: '#ffffff',
+    fontSize: 10,
+    fontWeight: '700'
+  },
+  btnShareCard: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 2,
     backgroundColor: '#25D366',
     paddingVertical: 7,
     borderRadius: 6
   },
   btnShareCardText: {
     color: '#ffffff',
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '700'
   },
   btnResetFull: {
