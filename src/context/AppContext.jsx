@@ -381,9 +381,17 @@ export const AppProvider = ({ children }) => {
   const addJobs = async (files, defaultTargetFormat = 'PDF') => {
     if (!files || !Array.isArray(files) || files.length === 0) return [];
 
+    const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB limit
     const newItems = [];
     for (const file of files) {
       const name = file.filename || file.file_name || file.name || 'Dokumen_Baru.docx';
+      const fileSize = file.size || file.file_size || 3500000;
+
+      if (fileSize > MAX_FILE_SIZE) {
+        showToast(`Berkas "${name}" ditolak karena melebihi batas maksimal 50 MB.`, 'error');
+        continue;
+      }
+
       let ext = 'DOCX';
       if (file.source_format) {
         ext = file.source_format.toUpperCase();
@@ -392,7 +400,6 @@ export const AppProvider = ({ children }) => {
       }
 
       const target = (file.target_format || defaultTargetFormat || 'PDF').toUpperCase();
-      const fileSize = file.size || file.file_size || 3500000;
 
       // Always generate standard UUID v4 for database compatibility
       const uuid = typeof crypto !== 'undefined' && crypto.randomUUID

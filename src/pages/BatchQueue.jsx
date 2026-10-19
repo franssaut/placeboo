@@ -43,11 +43,24 @@ export default function BatchQueue() {
   const activeJobs = conversions.filter(c => c.status !== 'completed' && (c.progress || 0) < 100);
   const completedJobs = conversions.filter(c => c.status === 'completed' || (c.progress || 0) >= 100);
 
-  const handleFileUpload = (e) => {
-    const files = Array.from(e.target.files || []);
-    if (!files.length) return;
+  const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
 
-    addJobs(files);
+  const handleFileUpload = (e) => {
+    const rawFiles = Array.from(e.target.files || []);
+    if (!rawFiles.length) return;
+
+    const oversized = rawFiles.filter((f) => f.size > MAX_FILE_SIZE);
+    if (oversized.length > 0) {
+      showToast(
+        `Berkas "${oversized[0].name}" melebihi batas ukuran maksimal 50 MB.`,
+        'error'
+      );
+    }
+
+    const validFiles = rawFiles.filter((f) => f.size <= MAX_FILE_SIZE);
+    if (validFiles.length > 0) {
+      addJobs(validFiles);
+    }
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 

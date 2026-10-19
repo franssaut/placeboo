@@ -153,14 +153,14 @@ export default function Catalog() {
       title: 'PDF ke JPG High-Res',
       description: 'Ekstrak setiap halaman PDF menjadi foto JPG beresolusi ultra-tinggi untuk kebutuhan publikasi cetak.',
       category: 'from-pdf',
-      badge: 'Hingga 600 DPI',
-      badgeClass: 'bg-surface-container text-on-surface-variant font-code-mono font-semibold',
-      icon: 'burst_mode',
-      iconBg: 'bg-rose-500/10 text-rose-600',
-      tagColor: 'bg-rose-600',
-      flow: 'PDF → JPG',
+      badge: 'Paling Populer',
+      badgeClass: 'bg-amber-500/15 text-amber-800',
+      icon: 'photo_library',
+      iconBg: 'bg-cyan-500/10 text-cyan-600',
+      tagColor: 'bg-cyan-600',
+      flow: 'PDF → JPG/PNG',
       defaultExt: 'pdf',
-      target: 'jpg'
+      target: 'png'
     },
     {
       id: 'webp-converter',

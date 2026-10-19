@@ -27,9 +27,26 @@ export default function Home() {
     }
   }, [searchParams]);
 
+  const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50 MB
+
   const handleFileSelect = (e) => {
-    const files = Array.from(e.target.files || []);
-    if (!files.length) return;
+    const rawFiles = Array.from(e.target.files || []);
+    if (!rawFiles.length) return;
+
+    // Validate 50MB file size limit
+    const oversized = rawFiles.filter((f) => f.size > MAX_FILE_SIZE);
+    if (oversized.length > 0) {
+      showToast(
+        `Berkas "${oversized[0].name}" melebihi batas maksimal 50 MB (${formatBytes(oversized[0].size)}).`,
+        'error'
+      );
+    }
+
+    const files = rawFiles.filter((f) => f.size <= MAX_FILE_SIZE);
+    if (!files.length) {
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
 
     setLastConvertedJob(null);
     setIsConvertingHome(false);
@@ -59,7 +76,19 @@ export default function Home() {
   const handleDrop = (e) => {
     e.preventDefault();
     setIsDragging(false);
-    const files = Array.from(e.dataTransfer.files || []);
+    const rawFiles = Array.from(e.dataTransfer.files || []);
+    if (!rawFiles.length) return;
+
+    // Validate 50MB file size limit
+    const oversized = rawFiles.filter((f) => f.size > MAX_FILE_SIZE);
+    if (oversized.length > 0) {
+      showToast(
+        `Berkas "${oversized[0].name}" melebihi batas maksimal 50 MB (${formatBytes(oversized[0].size)}).`,
+        'error'
+      );
+    }
+
+    const files = rawFiles.filter((f) => f.size <= MAX_FILE_SIZE);
     if (!files.length) return;
 
     setLastConvertedJob(null);
@@ -555,9 +584,9 @@ export default function Home() {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-space-md">
             {[
               { title: 'PDF ke Word', tag: 'PDF → DOCX', desc: 'Ekstraksi dokumen teks dan tata letak tabel yang tetap dapat disunting dengan presisi 100%.', icon: 'article', format: 'DOCX', bg: 'bg-surface-container text-primary' },
-              { title: 'Excel ke PDF', tag: 'XLSX → PDF', desc: 'Ubah tabel spreadsheet dan formula rumit menjadi dokumen PDF siap cetak dengan margin rapi.', icon: 'table_chart', format: 'PDF', bg: 'bg-tertiary-fixed text-tertiary' },
+              { title: 'PDF ke Gambar', tag: 'PDF → JPG/PNG', desc: 'Ekstrak setiap halaman berkas PDF menjadi gambar raster resolusi tinggi (PNG/JPG) tajam 300 DPI.', icon: 'photo_library', format: 'PNG', bg: 'bg-cyan-500/15 text-cyan-700' },
               { title: 'Gambar ke PDF', tag: 'IMG → PDF', desc: 'Gabungkan album foto, pindaian kuitansi, atau diagram berformat JPG/PNG dalam satu berkas PDF.', icon: 'image', format: 'PDF', bg: 'bg-secondary-fixed text-secondary' },
-              { title: 'Kompres PDF Cerdas', tag: 'MAX 90%', desc: 'Pangkas ukuran berkas besar hingga 90% lebih ramping tanpa mengorbankan ketajaman teks atau dpi visual.', icon: 'compress', format: 'PDF', bg: 'bg-surface-container text-primary' },
+              { title: 'Excel ke PDF', tag: 'XLSX → PDF', desc: 'Ubah tabel spreadsheet dan formula rumit menjadi dokumen PDF siap cetak dengan margin rapi.', icon: 'table_chart', format: 'PDF', bg: 'bg-tertiary-fixed text-tertiary' },
               { title: 'Gabung Berkas PDF', tag: 'MULTI-PAGE', desc: 'Satukan puluhan lembar PDF acak menjadi satu bundel portofolio rapi dengan urutan halaman kustom.', icon: 'call_merge', format: 'PDF', bg: 'bg-surface-container-high text-primary' },
               { title: 'OCR Scanner AI', tag: 'AI VISION', desc: 'Deteksi dan ekstrak teks dari pindaian foto kuitansi atau dokumen fisik ke format teks murni siap salin.', icon: 'document_scanner', format: 'TXT', bg: 'bg-secondary-fixed text-secondary' }
             ].map((tool, idx) => (
