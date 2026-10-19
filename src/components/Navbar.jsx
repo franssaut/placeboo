@@ -3,7 +3,7 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 
 export default function Navbar() {
-  const { supabaseStatus, openProModal, showToast } = useApp();
+  const { openProModal, showToast } = useApp();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const navigate = useNavigate();
@@ -21,43 +21,6 @@ export default function Navbar() {
         ? 'bg-surface-container text-primary font-semibold'
         : 'text-on-surface-variant hover:bg-surface-container-low hover:text-on-surface'
     }`;
-
-  const renderBadge = () => {
-    if (supabaseStatus === 'connected') {
-      return (
-        <button
-          onClick={() => showToast('Database Supabase aktif & tersinkronisasi secara real-time!')}
-          className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-code-mono font-medium shadow-sm bg-tertiary-container/15 text-tertiary border border-tertiary/20"
-          title="Terhubung ke Supabase Database & Realtime Sync"
-        >
-          <span className="w-2 h-2 rounded-full bg-tertiary animate-pulse"></span>
-          Supabase Sync Aktif
-        </button>
-      );
-    }
-    if (supabaseStatus === 'schema_pending') {
-      return (
-        <button
-          onClick={() =>
-            alert(
-              'Koneksi Supabase aktif! Jalankan skrip supabase/schema.sql di SQL Editor Dashboard Supabase Anda untuk mengaktifkan tabel cloud penuh.'
-            )
-          }
-          className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-code-mono font-medium shadow-sm bg-surface-container text-primary border border-primary/20"
-          title="Koneksi online. Jalankan supabase/schema.sql untuk mengaktifkan cloud table."
-        >
-          <span className="w-2 h-2 rounded-full bg-primary"></span>
-          Supabase (Mode Lokal)
-        </button>
-      );
-    }
-    return (
-      <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-code-mono font-medium shadow-sm bg-surface-container-low text-on-surface-variant">
-        <span className="w-2 h-2 rounded-full bg-outline"></span>
-        Mode Offline
-      </div>
-    );
-  };
 
   return (
     <header className="fixed top-0 left-0 right-0 z-50 bg-surface-container-lowest/85 backdrop-blur-xl shadow-[0_1px_8px_rgba(15,23,42,0.05)]">
@@ -80,7 +43,6 @@ export default function Navbar() {
         </div>
 
         <div className="flex items-center gap-space-md flex-shrink-0">
-          {renderBadge()}
 
           <div className="relative hidden lg:block w-52">
             <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-[18px]">

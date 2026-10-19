@@ -689,11 +689,11 @@ export default function Home() {
 
                 <div className="p-space-md rounded-xl bg-surface-container-low border border-outline-variant/10 space-y-space-xs">
                   <div className="flex items-center gap-2 text-on-surface font-semibold font-label-md">
-                    <span className="material-symbols-outlined text-[20px]">cloud_sync</span>
-                    Supabase Realtime Sync
+                    <span className="material-symbols-outlined text-[20px]">lock_reset</span>
+                    Zero Data Retention
                   </div>
                   <p className="font-body-sm text-body-sm text-on-surface-variant">
-                    Dukungan sinkronisasi database cloud Supabase dengan fallback penyimpanan lokal otomatis.
+                    Berkas diproses langsung dalam memori terenkripsi dan dihapus seketika setelah unduhan selesai.
                   </p>
                 </div>
               </div>
