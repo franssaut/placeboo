@@ -521,7 +521,7 @@ export default function Home() {
               { title: 'PDF ke Gambar', tag: 'PDF → JPG/PNG', desc: 'Ekstrak setiap halaman berkas PDF menjadi gambar raster resolusi tinggi (PNG/JPG) tajam 300 DPI.', icon: 'photo_library', format: 'PNG', bg: 'bg-cyan-500/15 text-cyan-700' },
               { title: 'Gambar ke PDF', tag: 'IMG → PDF', desc: 'Gabungkan album foto, pindaian kuitansi, atau diagram berformat JPG/PNG dalam satu berkas PDF.', icon: 'image', format: 'PDF', bg: 'bg-secondary-fixed text-secondary' },
               { title: 'Excel ke PDF', tag: 'XLSX → PDF', desc: 'Ubah tabel spreadsheet dan formula rumit menjadi dokumen PDF siap cetak dengan margin rapi.', icon: 'table_chart', format: 'PDF', bg: 'bg-tertiary-fixed text-tertiary' },
-              { title: 'Gabung Berkas PDF', tag: 'MULTI-PAGE', desc: 'Satukan puluhan lembar PDF acak menjadi satu bundel portofolio rapi dengan urutan halaman kustom.', icon: 'call_merge', format: 'PDF', bg: 'bg-surface-container-high text-primary' },
+              { title: 'PDF ke Excel', tag: 'PDF → XLSX', desc: 'Ekstraksi otomatis kisi tabel keuangan, faktur, dan data angka dari PDF langsung menjadi spreadsheet Excel hidup.', icon: 'table_view', format: 'XLSX', bg: 'bg-emerald-500/15 text-emerald-700' },
               { title: 'OCR Scanner AI', tag: 'AI VISION', desc: 'Deteksi dan ekstrak teks dari pindaian foto kuitansi atau dokumen fisik ke format teks murni siap salin.', icon: 'document_scanner', format: 'TXT', bg: 'bg-secondary-fixed text-secondary' }
             ].map((tool, idx) => (
               <div
