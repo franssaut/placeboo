@@ -41,14 +41,11 @@ export default function DownloadHistory() {
   const currentItem = conversions.find(c => c.id === selectedFileId) || completedFiles[0] || conversions[0];
 
   const handleDownloadSingle = (file) => {
-    const fileName = file.file_name.replace(/\.[^/.]+$/, `.${(file.target_format || 'pdf').toLowerCase()}`);
-    triggerDownload(fileName);
-    showToast(`Mengunduh "${fileName}"...`, 'success');
+    triggerDownload(file);
   };
 
   const handleDownloadAllZip = () => {
     triggerDownload('Placeboo_Semua_Dokumen_Terproses.zip');
-    showToast('Mengunduh paket arsip ZIP semua berkas...', 'success');
   };
 
   const handleCloudExport = (service) => {
@@ -61,6 +58,10 @@ export default function DownloadHistory() {
       showToast('Seluruh riwayat dan berkas telah dibersihkan secara permanen', 'info');
     }
   };
+
+  const currentFileName = currentItem
+    ? (currentItem.filename || currentItem.file_name || currentItem.name || 'Laporan_Keuangan_Q3.xlsx')
+    : 'Laporan_Keuangan_Q3.xlsx';
 
   return (
     <div className={`min-h-screen bg-surface flex flex-col justify-between ${isFullscreen ? 'fixed inset-0 z-50 overflow-y-auto bg-surface' : ''}`}>
@@ -90,6 +91,7 @@ export default function DownloadHistory() {
 
             <div className="flex flex-wrap items-center gap-2">
               <button
+                type="button"
                 onClick={handlePurge}
                 className="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg bg-surface-container text-error hover:bg-error-container font-label-md text-label-md transition-all shadow-sm"
               >
@@ -97,6 +99,7 @@ export default function DownloadHistory() {
                 Hapus Semua Sekarang
               </button>
               <button
+                type="button"
                 onClick={() => navigate('/')}
                 className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary-container text-on-primary font-label-md text-label-md transition-all shadow-sm hover:bg-primary"
               >
@@ -116,12 +119,13 @@ export default function DownloadHistory() {
                   <div className="flex items-center gap-2 min-w-0">
                     <span className="material-symbols-outlined text-primary text-[20px]">description</span>
                     <span className="font-label-md text-label-md font-semibold text-on-surface truncate max-w-xs">
-                      {currentItem ? currentItem.file_name : 'Laporan_Keuangan_Q3.xlsx'}
+                      {currentFileName}
                     </span>
                   </div>
 
                   <div className="flex items-center gap-1.5 font-code-mono text-code-mono text-body-sm text-on-surface-variant">
                     <button
+                      type="button"
                       onClick={() => handleZoom(-10)}
                       className="w-8 h-8 rounded-lg bg-surface-container hover:bg-surface-container-high flex items-center justify-center text-on-surface transition-colors"
                       title="Perkecil (-10%)"
@@ -132,6 +136,7 @@ export default function DownloadHistory() {
                       {zoomLevel}%
                     </span>
                     <button
+                      type="button"
                       onClick={() => handleZoom(10)}
                       className="w-8 h-8 rounded-lg bg-surface-container hover:bg-surface-container-high flex items-center justify-center text-on-surface transition-colors"
                       title="Perbesar (+10%)"
@@ -139,6 +144,7 @@ export default function DownloadHistory() {
                       <span className="material-symbols-outlined text-[16px]">add</span>
                     </button>
                     <button
+                      type="button"
                       onClick={() => setIsFullscreen(!isFullscreen)}
                       className="w-8 h-8 rounded-lg bg-surface-container hover:bg-surface-container-high flex items-center justify-center text-on-surface transition-colors ml-1"
                       title="Fullscreen"
@@ -167,7 +173,7 @@ export default function DownloadHistory() {
                             Placeboo Enterprise Corp
                           </div>
                           <div className="font-code-mono text-body-sm text-on-surface-variant">
-                            Laporan Konsolidasi Finansial - Q3 FY2026
+                            {currentFileName}
                           </div>
                         </div>
                       </div>
@@ -257,11 +263,14 @@ export default function DownloadHistory() {
                     Formula Excel &amp; Makro dipertahankan utuh tanpa distorsi cell.
                   </div>
                   <button
-                    onClick={() => showToast('Membuka pratinjau penuh dalam tab aman baru...', 'info')}
+                    type="button"
+                    onClick={() => {
+                      if (currentItem) handleDownloadSingle(currentItem);
+                    }}
                     className="text-primary hover:underline font-semibold flex items-center gap-1"
                   >
-                    Buka di Tab Terpisah
-                    <span className="material-symbols-outlined text-[14px]">open_in_new</span>
+                    Unduh Berkas Ini
+                    <span className="material-symbols-outlined text-[14px]">download</span>
                   </button>
                 </div>
               </div>
@@ -274,6 +283,9 @@ export default function DownloadHistory() {
                 <div className="space-y-2">
                   {conversions.map((file) => {
                     const isSelected = (currentItem && currentItem.id === file.id);
+                    const fileTitle = file.filename || file.file_name || file.name || 'Dokumen';
+                    const targetFormat = (file.target_format || 'PDF').toUpperCase();
+
                     return (
                       <div
                         key={file.id}
@@ -290,30 +302,31 @@ export default function DownloadHistory() {
                           </div>
                           <div className="min-w-0">
                             <p className="font-label-md text-label-md font-semibold text-on-surface truncate">
-                              {file.file_name}
+                              {fileTitle}
                             </p>
                             <p className="font-code-mono text-[11px] text-on-surface-variant">
-                              Target: {(file.target_format || 'PDF').toUpperCase()} • Selesai
+                              Target: {targetFormat} • {file.status === 'completed' || (file.progress || 0) >= 100 ? 'Selesai' : 'Sedang Diproses'}
                             </p>
                           </div>
                         </div>
 
                         <div className="flex items-center gap-2 flex-shrink-0">
                           <button
+                            type="button"
                             onClick={(e) => {
                               e.stopPropagation();
                               handleDownloadSingle(file);
                             }}
-                            className="p-2 rounded-lg bg-primary-container text-on-primary hover:bg-primary transition-colors"
+                            className="p-2 rounded-lg bg-primary-container text-on-primary hover:bg-primary transition-colors shadow-sm"
                             title="Unduh Berkas Ini"
                           >
                             <span className="material-symbols-outlined text-[16px]">download</span>
                           </button>
                           <button
+                            type="button"
                             onClick={(e) => {
                               e.stopPropagation();
                               deleteJob(file.id);
-                              showToast(`Berkas dihapus`, 'info');
                             }}
                             className="p-2 rounded-lg bg-surface-container text-error hover:bg-error-container transition-colors"
                             title="Hapus"
@@ -346,6 +359,7 @@ export default function DownloadHistory() {
 
                 {/* Big Primary Action Button */}
                 <button
+                  type="button"
                   onClick={handleDownloadAllZip}
                   className="w-full flex items-center justify-between px-space-md py-3.5 bg-primary-container hover:bg-primary text-on-primary rounded-xl shadow-md transition-all active:scale-[0.98] group"
                 >
@@ -358,7 +372,7 @@ export default function DownloadHistory() {
                         Unduh Semua Berkas
                       </div>
                       <div className="font-code-mono text-body-sm text-on-primary-container">
-                        Format .ZIP • 32.4 MB
+                        Format .ZIP • Arsip Lengkap
                       </div>
                     </div>
                   </div>

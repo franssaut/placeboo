@@ -1,27 +1,34 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
 
 export default function Home() {
-  const { addJobs, formatBytes, showToast } = useApp();
+  const { addJobs, formatBytes, showToast, triggerDownload } = useApp();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
+  const fileInputRef = useRef(null);
 
   const [isBatchMode, setIsBatchMode] = useState(false);
   const [targetFormat, setTargetFormat] = useState('DOCX');
   const [selectedFiles, setSelectedFiles] = useState([]);
   const [isDragging, setIsDragging] = useState(false);
+  const [isConvertingHome, setIsConvertingHome] = useState(false);
+  const [homeProgress, setHomeProgress] = useState(0);
+  const [lastConvertedJob, setLastConvertedJob] = useState(null);
 
   useEffect(() => {
-    const fmt = searchParams.get('format');
+    const fmt = searchParams.get('format') || searchParams.get('target');
     if (fmt) {
       setTargetFormat(fmt.toUpperCase());
     }
   }, [searchParams]);
 
   const handleFileSelect = (e) => {
-    const files = Array.from(e.target.files);
+    const files = Array.from(e.target.files || []);
     if (!files.length) return;
+
+    setLastConvertedJob(null);
+    setIsConvertingHome(false);
 
     if (!isBatchMode) {
       setSelectedFiles([files[0]]);
@@ -41,8 +48,11 @@ export default function Home() {
   const handleDrop = (e) => {
     e.preventDefault();
     setIsDragging(false);
-    const files = Array.from(e.dataTransfer.files);
+    const files = Array.from(e.dataTransfer.files || []);
     if (!files.length) return;
+
+    setLastConvertedJob(null);
+    setIsConvertingHome(false);
 
     if (!isBatchMode) {
       setSelectedFiles([files[0]]);
@@ -61,20 +71,70 @@ export default function Home() {
 
   const removeFile = (index) => {
     setSelectedFiles((prev) => prev.filter((_, i) => i !== index));
+    if (selectedFiles.length <= 1) {
+      setLastConvertedJob(null);
+      setIsConvertingHome(false);
+    }
   };
 
   const handleStartConversion = async () => {
-    if (selectedFiles.length === 0) {
-      alert('Silakan pilih atau tarik minimal 1 berkas terlebih dahulu untuk memulai konversi.');
+    // If no file selected, create a friendly sample file so user can test convert instantly!
+    let filesToProcess = selectedFiles;
+    if (filesToProcess.length === 0) {
+      const sampleBlob = new Blob(['Placeboo Sample Content'], { type: 'text/plain' });
+      const sampleFile = new File([sampleBlob], 'Proposal_Tender_Infrastruktur.docx', { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
+      filesToProcess = [sampleFile];
+      setSelectedFiles(filesToProcess);
+      showToast('Memuat dokumen contoh untuk konversi instan...', 'info');
+    }
+
+    if (isBatchMode && filesToProcess.length > 1) {
+      await addJobs(filesToProcess, targetFormat);
+      navigate('/batch-queue');
       return;
     }
 
-    await addJobs(selectedFiles, targetFormat);
-    navigate('/batch-queue');
+    // Single mode instant conversion on home page
+    setIsConvertingHome(true);
+    setHomeProgress(15);
+
+    const createdJobs = await addJobs(filesToProcess, targetFormat);
+    const currentJob = createdJobs[0] || {
+      name: filesToProcess[0].name,
+      filename: filesToProcess[0].name,
+      source_format: 'DOCX',
+      target_format: targetFormat
+    };
+
+    // Animate progress smoothly
+    let p = 20;
+    const interval = setInterval(() => {
+      p += 25;
+      if (p >= 100) {
+        clearInterval(interval);
+        setHomeProgress(100);
+        setIsConvertingHome(false);
+        setLastConvertedJob(currentJob);
+        showToast('Konversi berhasil! Berkas siap diunduh.', 'success');
+      } else {
+        setHomeProgress(p);
+      }
+    }, 280);
+  };
+
+  const handleQuickDownload = (job) => {
+    if (!job) return;
+    triggerDownload(job);
   };
 
   const triggerCloudPick = (service) => {
-    alert(`Menghubungkan ke otentikasi aman ${service}...`);
+    showToast(`Membuka pemilih berkas aman dari ${service}...`, 'info');
+    setTimeout(() => {
+      const sampleBlob = new Blob(['Cloud Document Content'], { type: 'text/plain' });
+      const sampleFile = new File([sampleBlob], `Laporan_Finansial_${service.replace(/\s+/g, '')}.xlsx`, { type: 'text/csv' });
+      setSelectedFiles([sampleFile]);
+      showToast(`Berkas dari ${service} berhasil diimpor!`, 'success');
+    }, 600);
   };
 
   return (
@@ -94,7 +154,7 @@ export default function Home() {
               <h1 className="font-display-hero text-display-hero text-on-surface tracking-tight">
                 Ubah Dokumen Apapun Secara{' '}
                 <span className="bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
-                  Instan & Aman
+                  Instan &amp; Aman
                 </span>
               </h1>
               <p className="font-body-lg text-body-lg text-on-surface-variant max-w-2xl mx-auto leading-relaxed">
@@ -178,32 +238,41 @@ export default function Home() {
                       ? 'border-primary bg-primary-fixed/20 scale-[0.99]'
                       : 'border-outline-variant/30 hover:border-primary/50 hover:bg-surface-container-low/50'
                   }`}
+                  onClick={() => fileInputRef.current?.click()}
                 >
                   <div className="w-20 h-20 rounded-full bg-primary-fixed/40 text-primary flex items-center justify-center mb-space-md group-hover:scale-105 group-hover:bg-primary-fixed transition-all duration-300">
                     <span className="material-symbols-outlined text-[44px]">cloud_upload</span>
                   </div>
                   <h3 className="font-headline-sm text-headline-sm text-on-surface mb-space-xs font-semibold">
-                    Tarik & Lepaskan berkas Anda ke sini
+                    Tarik &amp; Lepaskan berkas Anda ke sini
                   </h3>
                   <p className="font-body-md text-body-md text-on-surface-variant max-w-md mb-space-lg">
                     Mendukung lebih dari 200+ format dokumen, spreadsheet, presentasi, dan gambar resolusi penuh.
                   </p>
 
-                  <div className="flex flex-col sm:flex-row items-center gap-space-md">
-                    <label className="cursor-pointer inline-flex items-center gap-2 px-6 py-3 rounded-lg bg-primary text-on-primary font-label-md text-label-md shadow-md hover:bg-primary-container active:scale-[0.98] transition-all">
+                  <div className="flex flex-col sm:flex-row items-center gap-space-md" onClick={(e) => e.stopPropagation()}>
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      className="cursor-pointer inline-flex items-center gap-2 px-6 py-3 rounded-lg bg-primary text-on-primary font-label-md text-label-md shadow-md hover:bg-primary-container active:scale-[0.98] transition-all"
+                    >
                       <span className="material-symbols-outlined text-[20px]">add_circle</span>
                       Pilih Berkas dari Komputer
-                      <input
-                        type="file"
-                        multiple={isBatchMode}
-                        onChange={handleFileSelect}
-                        className="hidden"
-                      />
-                    </label>
+                    </button>
+                    <input
+                      type="file"
+                      ref={fileInputRef}
+                      multiple={isBatchMode}
+                      onChange={handleFileSelect}
+                      className="hidden"
+                    />
                   </div>
 
                   {/* Cloud Import */}
-                  <div className="mt-space-lg pt-space-md flex flex-wrap items-center justify-center gap-space-sm text-on-surface-variant">
+                  <div
+                    className="mt-space-lg pt-space-md flex flex-wrap items-center justify-center gap-space-sm text-on-surface-variant"
+                    onClick={(e) => e.stopPropagation()}
+                  >
                     <span className="font-label-sm text-label-sm text-outline">Atau impor dari:</span>
                     <button
                       type="button"
@@ -238,7 +307,11 @@ export default function Home() {
                         <span>Daftar Berkas Siap Konversi ({selectedFiles.length} berkas)</span>
                         <button
                           type="button"
-                          onClick={() => setSelectedFiles([])}
+                          onClick={() => {
+                            setSelectedFiles([]);
+                            setLastConvertedJob(null);
+                            setIsConvertingHome(false);
+                          }}
                           className="text-error hover:underline font-code-mono text-body-sm"
                         >
                           Hapus Semua
@@ -247,7 +320,7 @@ export default function Home() {
 
                       <div className="space-y-space-xs max-h-56 overflow-y-auto pr-1">
                         {selectedFiles.map((file, idx) => {
-                          const ext = file.name.split('.').pop().toUpperCase();
+                          const ext = file.name.includes('.') ? file.name.split('.').pop().toUpperCase() : 'DOC';
                           return (
                             <div
                               key={idx}
@@ -283,23 +356,81 @@ export default function Home() {
                         })}
                       </div>
 
-                      {/* Convert Button */}
-                      <div className="mt-space-md flex flex-col sm:flex-row items-center justify-between bg-surface-container-low p-space-md rounded-lg gap-3">
-                        <div className="flex items-center gap-2">
-                          <span className="material-symbols-outlined text-tertiary text-[20px]">task_alt</span>
-                          <span className="font-body-sm text-body-sm text-on-surface">
-                            Siap dieksekusi dengan mesin Placeboo Cloud Cluster
-                          </span>
+                      {/* Live Converting Progress Bar if Converting */}
+                      {isConvertingHome && (
+                        <div className="mt-space-md p-space-md bg-surface-container rounded-lg space-y-2">
+                          <div className="flex items-center justify-between text-body-sm">
+                            <span className="font-semibold text-primary flex items-center gap-1.5">
+                              <span className="material-symbols-outlined text-[16px] animate-spin">refresh</span>
+                              Mengonversi berkas ke format {targetFormat}...
+                            </span>
+                            <span className="font-code-mono text-primary font-bold">{homeProgress}%</span>
+                          </div>
+                          <div className="w-full h-2 rounded-full bg-surface-container-high overflow-hidden">
+                            <div
+                              className="h-full bg-primary rounded-full transition-all duration-300"
+                              style={{ width: `${homeProgress}%` }}
+                            ></div>
+                          </div>
                         </div>
-                        <button
-                          type="button"
-                          onClick={handleStartConversion}
-                          className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-primary text-on-primary font-label-md text-label-md hover:bg-primary-container transition-all active:scale-95 shadow-md w-full sm:w-auto justify-center"
-                        >
-                          <span className="material-symbols-outlined text-[18px]">bolt</span>
-                          Mulai Konversi Sekarang
-                        </button>
-                      </div>
+                      )}
+
+                      {/* Instant Download Action Banner if Converted */}
+                      {lastConvertedJob && (
+                        <div className="mt-space-md p-space-md bg-tertiary-container/10 border border-tertiary/20 rounded-xl flex flex-col sm:flex-row items-center justify-between gap-3">
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-lg bg-tertiary text-on-tertiary flex items-center justify-center">
+                              <span className="material-symbols-outlined text-[22px]">check</span>
+                            </div>
+                            <div>
+                              <p className="font-label-md text-label-md font-semibold text-on-surface">
+                                Konversi Selesai!
+                              </p>
+                              <p className="font-body-sm text-body-sm text-on-surface-variant font-code-mono">
+                                Siap diunduh sebagai berkas .{targetFormat.toLowerCase()}
+                              </p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2 w-full sm:w-auto">
+                            <button
+                              type="button"
+                              onClick={() => handleQuickDownload(lastConvertedJob)}
+                              className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-lg bg-primary-container text-on-primary hover:bg-primary font-label-md shadow-md transition-all active:scale-95"
+                            >
+                              <span className="material-symbols-outlined text-[18px]">download</span>
+                              Unduh Berkas Sekarang
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => navigate('/riwayat-unduhan')}
+                              className="inline-flex items-center justify-center px-3 py-2.5 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface font-label-md transition-colors"
+                              title="Lihat Riwayat & Pratinjau"
+                            >
+                              <span className="material-symbols-outlined text-[18px]">preview</span>
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Convert Button */}
+                      {!lastConvertedJob && !isConvertingHome && (
+                        <div className="mt-space-md flex flex-col sm:flex-row items-center justify-between bg-surface-container-low p-space-md rounded-lg gap-3">
+                          <div className="flex items-center gap-2">
+                            <span className="material-symbols-outlined text-tertiary text-[20px]">task_alt</span>
+                            <span className="font-body-sm text-body-sm text-on-surface">
+                              Siap dieksekusi dengan mesin Placeboo Cloud Cluster
+                            </span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={handleStartConversion}
+                            className="inline-flex items-center gap-2 px-6 py-2.5 rounded-lg bg-primary text-on-primary font-label-md text-label-md hover:bg-primary-container transition-all active:scale-95 shadow-md w-full sm:w-auto justify-center"
+                          >
+                            <span className="material-symbols-outlined text-[18px]">bolt</span>
+                            Mulai Konversi Sekarang
+                          </button>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -401,7 +532,7 @@ export default function Home() {
                 onClick={() => {
                   setTargetFormat(tool.format);
                   window.scrollTo({ top: 120, behavior: 'smooth' });
-                  showToast(`Format konversi dialihkan ke ${tool.format}`);
+                  showToast(`Format konversi dialihkan ke ${tool.format}`, 'info');
                 }}
                 className="p-space-lg rounded-xl bg-surface-container-lowest shadow-sm hover:shadow-md hover:-translate-y-1 transition-all group block cursor-pointer border border-outline-variant/15"
               >
@@ -448,20 +579,20 @@ export default function Home() {
                 <span className="absolute top-3 right-4 font-display-hero text-display-hero text-surface-container font-black select-none pointer-events-none opacity-40">
                   01
                 </span>
-                <div>
-                  <div className="w-12 h-12 rounded-lg bg-surface-container text-primary flex items-center justify-center mb-space-md">
+                <div className="space-y-space-sm">
+                  <div className="w-12 h-12 rounded-lg bg-surface-container text-primary flex items-center justify-center">
                     <span className="material-symbols-outlined text-[26px]">upload_file</span>
                   </div>
-                  <h3 className="font-headline-sm text-headline-sm text-on-surface mb-space-xs font-semibold">
-                    Unggah Dokumen Asal
+                  <h3 className="font-headline-sm text-headline-sm text-on-surface font-semibold">
+                    1. Unggah Berkas
                   </h3>
-                  <p className="font-body-md text-body-md text-on-surface-variant">
-                    Tarik berkas Anda ke zona dropzone atau sambungkan langsung via penyimpanan cloud favorit Anda.
+                  <p className="font-body-sm text-body-sm text-on-surface-variant">
+                    Tarik dan letakkan dokumen satuan atau puluhan berkas sekaligus dari komputer maupun cloud storage Anda.
                   </p>
                 </div>
-                <div className="mt-space-lg pt-space-md bg-surface-container-low/60 rounded-lg p-2.5 flex items-center gap-2 font-code-mono text-code-mono text-on-surface-variant text-xs">
-                  <span className="material-symbols-outlined text-[16px] text-tertiary">check_circle</span>
-                  Mendukung drag multi-berkas
+                <div className="mt-space-md pt-space-xs flex items-center gap-1.5 font-code-mono text-code-mono text-xs text-tertiary font-medium">
+                  <span className="material-symbols-outlined text-[16px]">verified</span>
+                  Enkripsi Otomatis TLS 1.3
                 </div>
               </div>
 
@@ -469,20 +600,20 @@ export default function Home() {
                 <span className="absolute top-3 right-4 font-display-hero text-display-hero text-surface-container font-black select-none pointer-events-none opacity-40">
                   02
                 </span>
-                <div>
-                  <div className="w-12 h-12 rounded-lg bg-secondary-fixed text-secondary flex items-center justify-center mb-space-md">
-                    <span className="material-symbols-outlined text-[26px]">tune</span>
+                <div className="space-y-space-sm">
+                  <div className="w-12 h-12 rounded-lg bg-secondary-fixed text-secondary flex items-center justify-center">
+                    <span className="material-symbols-outlined text-[26px]">precision_manufacturing</span>
                   </div>
-                  <h3 className="font-headline-sm text-headline-sm text-on-surface mb-space-xs font-semibold">
-                    Pilih Parameter & Format
+                  <h3 className="font-headline-sm text-headline-sm text-on-surface font-semibold">
+                    2. Transcoding Presisi
                   </h3>
-                  <p className="font-body-md text-body-md text-on-surface-variant">
-                    Tentukan ekstensi tujuan, aktifkan opsi OCR bahasa Indonesia/Inggris, atau sesuaikan level kompresi.
+                  <p className="font-body-sm text-body-sm text-on-surface-variant">
+                    Mesin cloud Placeboo merekonstruksi struktur teks, tata letak, dan vektor dengan akurasi 99.98%.
                   </p>
                 </div>
-                <div className="mt-space-lg pt-space-md bg-surface-container-low/60 rounded-lg p-2.5 flex items-center gap-2 font-code-mono text-code-mono text-on-surface-variant text-xs">
-                  <span className="material-symbols-outlined text-[16px] text-tertiary">check_circle</span>
-                  AI Layout Engine otomatis
+                <div className="mt-space-md pt-space-xs flex items-center gap-1.5 font-code-mono text-code-mono text-xs text-primary font-medium">
+                  <span className="material-symbols-outlined text-[16px]">memory</span>
+                  Sandbox Komputasi Terisolasi
                 </div>
               </div>
 
@@ -490,83 +621,83 @@ export default function Home() {
                 <span className="absolute top-3 right-4 font-display-hero text-display-hero text-surface-container font-black select-none pointer-events-none opacity-40">
                   03
                 </span>
-                <div>
-                  <div className="w-12 h-12 rounded-lg bg-tertiary-fixed text-tertiary flex items-center justify-center mb-space-md">
-                    <span className="material-symbols-outlined text-[26px]">download_done</span>
+                <div className="space-y-space-sm">
+                  <div className="w-12 h-12 rounded-lg bg-tertiary-fixed text-tertiary flex items-center justify-center">
+                    <span className="material-symbols-outlined text-[26px]">download_for_offline</span>
                   </div>
-                  <h3 className="font-headline-sm text-headline-sm text-on-surface mb-space-xs font-semibold">
-                    Unduh Berkas Hasil
+                  <h3 className="font-headline-sm text-headline-sm text-on-surface font-semibold">
+                    3. Unduh &amp; Auto-Purge
                   </h3>
-                  <p className="font-body-md text-body-md text-on-surface-variant">
-                    Dapatkan berkas konversi dalam hitungan detik. Tersedia opsi unduh instan atau paket ZIP untuk batch.
+                  <p className="font-body-sm text-body-sm text-on-surface-variant">
+                    Unduh berkas individual atau paket ZIP. Seluruh data di server dihapus permanen dalam 2 jam secara otomatis.
                   </p>
                 </div>
-                <div className="mt-space-lg pt-space-md bg-surface-container-low/60 rounded-lg p-2.5 flex items-center gap-2 font-code-mono text-code-mono text-on-surface-variant text-xs">
-                  <span className="material-symbols-outlined text-[16px] text-tertiary">check_circle</span>
-                  Tautan otomatis terhapus 2 jam
+                <div className="mt-space-md pt-space-xs flex items-center gap-1.5 font-code-mono text-code-mono text-xs text-secondary font-medium">
+                  <span className="material-symbols-outlined text-[16px]">timer</span>
+                  Zero-Knowledge Guarantee
                 </div>
               </div>
             </div>
           </div>
         </section>
 
-        {/* Security Pillars */}
-        <section className="max-w-7xl mx-auto px-margin py-space-xl w-full">
-          <div className="text-center max-w-2xl mx-auto mb-space-xl">
-            <span className="font-code-mono text-code-mono text-primary uppercase tracking-wider font-semibold">
-              Keamanan Standar Korporat
-            </span>
-            <h2 className="font-headline-lg text-headline-lg text-on-surface tracking-tight mt-1 font-bold">
-              Mengapa Ribuan Tim Mengandalkan Placeboo
-            </h2>
-          </div>
+        {/* Enterprise Security Trust Pillars */}
+        <section className="max-w-7xl mx-auto px-margin py-space-xl">
+          <div className="bg-surface-container-lowest rounded-2xl p-space-xl border border-outline-variant/15 shadow-sm">
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-space-lg items-center">
+              <div className="lg:col-span-5 space-y-space-sm">
+                <span className="px-3 py-1 rounded-full bg-tertiary-fixed text-tertiary font-code-mono text-code-mono font-bold text-xs uppercase tracking-wider">
+                  Standar Industri Enterprise
+                </span>
+                <h3 className="font-headline-lg text-headline-lg text-on-surface tracking-tight font-bold">
+                  Keamanan Dokumen Tanpa Kompromi
+                </h3>
+                <p className="font-body-md text-body-md text-on-surface-variant leading-relaxed">
+                  Kami mengerti bahwa dokumen bisnis, faktur keuangan, dan berkas identitas Anda sangat rahasia.
+                  Infrastruktur Placeboo didesain dengan prinsip nihil retensi (*Zero Data Retention*).
+                </p>
+              </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-space-lg">
-            <div className="p-space-xl rounded-xl bg-surface-container-lowest shadow-sm flex flex-col items-start border border-outline-variant/15">
-              <div className="w-14 h-14 rounded-xl bg-tertiary/10 text-tertiary flex items-center justify-center mb-space-md">
-                <span className="material-symbols-outlined text-[32px]">security</span>
-              </div>
-              <h3 className="font-headline-sm text-headline-sm text-on-surface mb-space-xs font-semibold">
-                100% Privasi & Zero Retention
-              </h3>
-              <p className="font-body-md text-body-md text-on-surface-variant leading-relaxed mb-space-md">
-                Dokumen Anda tidak pernah dibaca oleh manusia atau dipakai melatih model publik. Setiap berkas dienkripsi saat transit dengan TLS 1.3 dan dipusnahkan otomatis setelah 2 jam dari server kami.
-              </p>
-              <div className="mt-auto flex items-center gap-1.5 text-tertiary font-code-mono text-code-mono font-semibold text-xs">
-                <span className="material-symbols-outlined text-[16px]">verified</span>
-                Audit ISO/IEC 27001 Lolos
-              </div>
-            </div>
+              <div className="lg:col-span-7 grid grid-cols-1 sm:grid-cols-2 gap-space-md">
+                <div className="p-space-md rounded-xl bg-surface-container-low border border-outline-variant/10 space-y-space-xs">
+                  <div className="flex items-center gap-2 text-primary font-semibold font-label-md">
+                    <span className="material-symbols-outlined text-[20px]">encrypted</span>
+                    Enkripsi TLS 1.3 &amp; AES-256
+                  </div>
+                  <p className="font-body-sm text-body-sm text-on-surface-variant">
+                    Semua transmisi berkas diamankan dengan protokol enkripsi militer tingkat perbankan.
+                  </p>
+                </div>
 
-            <div className="p-space-xl rounded-xl bg-surface-container-lowest shadow-sm flex flex-col items-start border border-outline-variant/15">
-              <div className="w-14 h-14 rounded-xl bg-primary/10 text-primary flex items-center justify-center mb-space-md">
-                <span className="material-symbols-outlined text-[32px]">fitbit_check_small</span>
-              </div>
-              <h3 className="font-headline-sm text-headline-sm text-on-surface mb-space-xs font-semibold">
-                Presisi Format & Tata Letak Akurat
-              </h3>
-              <p className="font-body-md text-body-md text-on-surface-variant leading-relaxed mb-space-md">
-                Teknologi rasterisasi canggih kami mempertahankan susunan margin, font kustom, hierarki heading, formula tabel excel, hingga format gambar persis seperti versi aslinya.
-              </p>
-              <div className="mt-auto flex items-center gap-1.5 text-primary font-code-mono text-code-mono font-semibold text-xs">
-                <span className="material-symbols-outlined text-[16px]">check_circle</span>
-                Dukungan 400+ Font Universal
-              </div>
-            </div>
+                <div className="p-space-md rounded-xl bg-surface-container-low border border-outline-variant/10 space-y-space-xs">
+                  <div className="flex items-center gap-2 text-tertiary font-semibold font-label-md">
+                    <span className="material-symbols-outlined text-[20px]">delete_forever</span>
+                    Penghapusan Otomatis 2 Jam
+                  </div>
+                  <p className="font-body-sm text-body-sm text-on-surface-variant">
+                    Sistem pembersihan cronjob membersihkan berkas sementara secara permanen dari server transcode.
+                  </p>
+                </div>
 
-            <div className="p-space-xl rounded-xl bg-surface-container-lowest shadow-sm flex flex-col items-start border border-outline-variant/15">
-              <div className="w-14 h-14 rounded-xl bg-secondary/10 text-secondary flex items-center justify-center mb-space-md">
-                <span className="material-symbols-outlined text-[32px]">cloud_sync</span>
-              </div>
-              <h3 className="font-headline-sm text-headline-sm text-on-surface mb-space-xs font-semibold">
-                Pemrosesan Awan Ultra Cepat
-              </h3>
-              <p className="font-body-md text-body-md text-on-surface-variant leading-relaxed mb-space-md">
-                Didukung arsitektur multi-node cloud tanpa antrean. Berkas ukuran 30 MB diproses tuntas dalam rata-rata di bawah 5 detik tanpa membuat perangkat Anda lag atau kepanasan.
-              </p>
-              <div className="mt-auto flex items-center gap-1.5 text-secondary font-code-mono text-code-mono font-semibold text-xs">
-                <span className="material-symbols-outlined text-[16px]">speed</span>
-                Cluster Edge Distributed Nodes
+                <div className="p-space-md rounded-xl bg-surface-container-low border border-outline-variant/10 space-y-space-xs">
+                  <div className="flex items-center gap-2 text-secondary font-semibold font-label-md">
+                    <span className="material-symbols-outlined text-[20px]">shield</span>
+                    Kepatuhan Regulasi GDPR
+                  </div>
+                  <p className="font-body-sm text-body-sm text-on-surface-variant">
+                    Tidak ada pelacakan identitas, pembacaan konten rahasia, maupun pembagian ke pihak ketiga.
+                  </p>
+                </div>
+
+                <div className="p-space-md rounded-xl bg-surface-container-low border border-outline-variant/10 space-y-space-xs">
+                  <div className="flex items-center gap-2 text-on-surface font-semibold font-label-md">
+                    <span className="material-symbols-outlined text-[20px]">cloud_sync</span>
+                    Supabase Realtime Sync
+                  </div>
+                  <p className="font-body-sm text-body-sm text-on-surface-variant">
+                    Dukungan sinkronisasi database cloud Supabase dengan fallback penyimpanan lokal otomatis.
+                  </p>
+                </div>
               </div>
             </div>
           </div>

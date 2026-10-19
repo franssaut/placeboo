@@ -21,46 +21,6 @@ export default function BatchQueue() {
   const [gdriveSync, setGdriveSync] = useState(false);
   const fileInputRef = useRef(null);
 
-  // If queue is empty, initialize default batch jobs if none exist
-  useEffect(() => {
-    if (conversions.length === 0) {
-      addJobs([
-        {
-          file_name: 'Proposal_Tender_Infrastruktur_v2.docx',
-          file_size: 8500000,
-          source_format: 'docx',
-          target_format: 'pdf',
-          status: 'processing',
-          progress: 84
-        },
-        {
-          file_name: 'Slide_Presentasi_Investor_Deck.pptx',
-          file_size: 22100000,
-          source_format: 'pptx',
-          target_format: 'pdf',
-          status: 'processing',
-          progress: 45
-        },
-        {
-          file_name: 'Scan_Kontrak_Kerjasama_Legalisir.jpg',
-          file_size: 3800000,
-          source_format: 'jpg',
-          target_format: 'pdf',
-          status: 'processing',
-          progress: 18
-        },
-        {
-          file_name: 'Data_Inventaris_Gudang.csv',
-          file_size: 1200000,
-          source_format: 'csv',
-          target_format: 'xlsx',
-          status: 'queued',
-          progress: 0
-        }
-      ]);
-    }
-  }, []);
-
   // Live simulation tick for queued / processing items
   useEffect(() => {
     if (isPaused) return;
@@ -68,12 +28,11 @@ export default function BatchQueue() {
     const timer = setInterval(() => {
       conversions.forEach((item) => {
         if (item.status === 'processing' && (item.progress || 0) < 100) {
-          const nextProgress = Math.min(100, (item.progress || 0) + Math.floor(Math.random() * 5) + 3);
+          const nextProgress = Math.min(100, (item.progress || 0) + Math.floor(Math.random() * 8) + 5);
           const nextStatus = nextProgress >= 100 ? 'completed' : 'processing';
           updateJobProgress(item.id, nextProgress, nextStatus);
         } else if (item.status === 'queued') {
-          // If previous jobs are high progress, kick off this one
-          updateJobProgress(item.id, 10, 'processing');
+          updateJobProgress(item.id, 15, 'processing');
         }
       });
     }, 1200);
@@ -81,36 +40,19 @@ export default function BatchQueue() {
     return () => clearInterval(timer);
   }, [conversions, isPaused, updateJobProgress]);
 
-  const activeJobs = conversions.filter(c => c.status !== 'completed');
-  const completedJobs = conversions.filter(c => c.status === 'completed');
+  const activeJobs = conversions.filter(c => c.status !== 'completed' && (c.progress || 0) < 100);
+  const completedJobs = conversions.filter(c => c.status === 'completed' || (c.progress || 0) >= 100);
 
   const handleFileUpload = (e) => {
     const files = Array.from(e.target.files || []);
     if (!files.length) return;
 
-    const newItems = files.map(file => {
-      const ext = file.name.split('.').pop().toLowerCase();
-      let target = 'pdf';
-      if (ext === 'pdf') target = 'docx';
-      else if (ext === 'xlsx' || ext === 'csv') target = 'pdf';
-      return {
-        file_name: file.name,
-        file_size: file.size,
-        source_format: ext,
-        target_format: target,
-        status: 'queued',
-        progress: 0
-      };
-    });
-
-    addJobs(newItems);
-    showToast(`${files.length} berkas ditambahkan ke antrean`, 'info');
+    addJobs(files);
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
   const handleDownloadAllZip = () => {
     triggerDownload('Placeboo_Batch_Converted_Files.zip');
-    showToast('Mengunduh semua berkas dalam paket ZIP...', 'success');
   };
 
   const getFormatBadgeStyle = (format) => {
@@ -174,6 +116,7 @@ export default function BatchQueue() {
                 className="hidden"
               />
               <button
+                type="button"
                 onClick={() => fileInputRef.current?.click()}
                 className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-surface-container hover:bg-surface-container-high text-on-surface font-label-md text-label-md transition-all shadow-sm"
               >
@@ -182,6 +125,7 @@ export default function BatchQueue() {
               </button>
 
               <button
+                type="button"
                 onClick={() => {
                   setIsPaused(!isPaused);
                   showToast(isPaused ? 'Melanjutkan proses transcoding...' : 'Antrean dijeda sementara', 'info');
@@ -199,6 +143,7 @@ export default function BatchQueue() {
               </button>
 
               <button
+                type="button"
                 onClick={() => navigate('/riwayat-unduhan')}
                 className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-primary-container text-on-primary font-label-md text-label-md transition-all shadow-sm hover:bg-primary"
               >
@@ -219,6 +164,7 @@ export default function BatchQueue() {
                     Unggah dokumen dari komputer Anda untuk memulai konversi massal berkecepatan tinggi.
                   </p>
                   <button
+                    type="button"
                     onClick={() => fileInputRef.current?.click()}
                     className="px-5 py-2.5 rounded-lg bg-primary-container text-on-primary font-label-md"
                   >
@@ -227,6 +173,7 @@ export default function BatchQueue() {
                 </div>
               ) : (
                 conversions.map((item, idx) => {
+                  const fileName = item.filename || item.file_name || item.name || 'Dokumen_Konversi';
                   const ext = (item.source_format || 'DOC').toUpperCase();
                   const targetExt = (item.target_format || 'PDF').toUpperCase();
                   const progress = item.progress || 0;
@@ -252,7 +199,7 @@ export default function BatchQueue() {
                           <div className="min-w-0">
                             <div className="flex items-center gap-2">
                               <span className="font-label-md text-label-md text-on-surface font-semibold truncate max-w-[220px] sm:max-w-xs md:max-w-sm">
-                                {item.file_name}
+                                {fileName}
                               </span>
                               {!isDone && (
                                 <span className="material-symbols-outlined text-[16px] text-primary animate-spin">
@@ -298,20 +245,19 @@ export default function BatchQueue() {
                           <div className="flex items-center gap-1.5">
                             {isDone ? (
                               <button
-                                onClick={() => {
-                                  triggerDownload(item.file_name.replace(/\.[^/.]+$/, `.${targetExt.toLowerCase()}`));
-                                  showToast(`Mengunduh ${item.file_name}...`, 'success');
-                                }}
-                                className="w-9 h-9 rounded-lg bg-primary-container text-on-primary hover:bg-primary flex items-center justify-center transition-colors"
+                                type="button"
+                                onClick={() => triggerDownload(item)}
+                                className="w-9 h-9 rounded-lg bg-primary-container text-on-primary hover:bg-primary flex items-center justify-center transition-colors shadow-sm"
                                 title="Unduh Hasil"
                               >
                                 <span className="material-symbols-outlined text-[18px]">download</span>
                               </button>
                             ) : (
                               <button
+                                type="button"
                                 onClick={() => {
                                   updateJobProgress(item.id, 100, 'completed');
-                                  showToast(`Mempercepat pemrosesan ${item.file_name}`, 'info');
+                                  showToast(`Konversi selesai! Berkas siap diunduh.`, 'success');
                                 }}
                                 className="w-9 h-9 rounded-lg bg-surface-container-low text-on-surface-variant hover:text-on-surface flex items-center justify-center transition-colors"
                                 title="Selesaikan Langsung"
@@ -320,10 +266,8 @@ export default function BatchQueue() {
                               </button>
                             )}
                             <button
-                              onClick={() => {
-                                deleteJob(item.id);
-                                showToast(`Berkas dihapus dari antrean`, 'info');
-                              }}
+                              type="button"
+                              onClick={() => deleteJob(item.id)}
                               className="w-9 h-9 rounded-lg bg-surface-container-low text-error hover:bg-error-container flex items-center justify-center transition-colors"
                               title="Batalkan / Hapus"
                             >
@@ -337,9 +281,7 @@ export default function BatchQueue() {
                       <div className="w-full h-1.5 rounded-full bg-surface-container overflow-hidden">
                         <div
                           className={`h-full rounded-full transition-all duration-300 ${
-                            isDone
-                              ? 'bg-tertiary'
-                              : 'bg-primary-container'
+                            isDone ? 'bg-tertiary' : 'bg-primary-container'
                           }`}
                           style={{ width: `${progress}%` }}
                         ></div>
@@ -365,6 +307,7 @@ export default function BatchQueue() {
                   </div>
                 </div>
                 <button
+                  type="button"
                   onClick={handleDownloadAllZip}
                   className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-surface-container-lowest text-primary font-label-md text-label-md shadow-sm hover:bg-surface-container transition-all"
                 >
@@ -395,6 +338,7 @@ export default function BatchQueue() {
                   </p>
                   <div className="grid grid-cols-2 gap-space-xs pt-1">
                     <button
+                      type="button"
                       onClick={() => setOcrLang('id')}
                       className={`px-3 py-2 rounded-lg font-label-sm text-label-sm font-semibold flex items-center justify-center gap-1.5 shadow-sm transition-all ${
                         ocrLang === 'id'
@@ -408,6 +352,7 @@ export default function BatchQueue() {
                       Bahasa Indonesia
                     </button>
                     <button
+                      type="button"
                       onClick={() => setOcrLang('en')}
                       className={`px-3 py-2 rounded-lg font-label-sm text-label-sm font-semibold flex items-center justify-center gap-1.5 shadow-sm transition-all ${
                         ocrLang === 'en'

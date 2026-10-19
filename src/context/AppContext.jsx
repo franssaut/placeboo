@@ -9,11 +9,44 @@ import {
   purgeSessionJobs,
   supabase
 } from '../services/supabase';
+import { generateConvertedBlob } from '../services/fileGenerator';
 
 const AppContext = createContext();
 
+// Helper to guarantee consistent object shape across all screens
+export const normalizeJob = (raw, defaultSessionId = 'DM-DEFAULT') => {
+  const name = raw?.filename || raw?.file_name || raw?.name || 'Dokumen_Konversi.pdf';
+  let ext = 'DOC';
+  if (raw?.source_format) {
+    ext = raw.source_format.toUpperCase();
+  } else if (name.includes('.')) {
+    ext = name.split('.').pop().toUpperCase();
+  }
+
+  const target = (raw?.target_format || 'PDF').toUpperCase();
+  const id = raw?.id || (typeof crypto !== 'undefined' && crypto.randomUUID
+    ? crypto.randomUUID()
+    : 'c_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7));
+
+  return {
+    id,
+    session_id: raw?.session_id || defaultSessionId,
+    filename: name,
+    file_name: name,
+    name: name,
+    source_format: ext,
+    target_format: target,
+    file_size: raw?.file_size || raw?.size || 2500000,
+    result_size: raw?.result_size || Math.floor((raw?.file_size || raw?.size || 2500000) * 0.65),
+    status: raw?.status || 'completed',
+    progress: typeof raw?.progress === 'number' ? raw.progress : 100,
+    created_at: raw?.created_at || new Date().toISOString(),
+    expires_at: raw?.expires_at || new Date(Date.now() + 2 * 3600 * 1000).toISOString()
+  };
+};
+
 const initialMockJobs = (sessionId) => [
-  {
+  normalizeJob({
     id: 'sample-1',
     session_id: sessionId,
     filename: 'Laporan_Keuangan_Q3_2024.xlsx',
@@ -24,8 +57,8 @@ const initialMockJobs = (sessionId) => [
     status: 'completed',
     progress: 100,
     created_at: new Date().toISOString()
-  },
-  {
+  }, sessionId),
+  normalizeJob({
     id: 'sample-2',
     session_id: sessionId,
     filename: 'Kontrak_Kerja_Sama_Vendor_2025.docx',
@@ -36,8 +69,8 @@ const initialMockJobs = (sessionId) => [
     status: 'completed',
     progress: 100,
     created_at: new Date(Date.now() - 5 * 60000).toISOString()
-  },
-  {
+  }, sessionId),
+  normalizeJob({
     id: 'sample-3',
     session_id: sessionId,
     filename: 'Proposal_Tender_Infrastruktur_v2.docx',
@@ -48,8 +81,8 @@ const initialMockJobs = (sessionId) => [
     status: 'processing',
     progress: 84,
     created_at: new Date(Date.now() - 10 * 60000).toISOString()
-  },
-  {
+  }, sessionId),
+  normalizeJob({
     id: 'sample-4',
     session_id: sessionId,
     filename: 'Slide_Presentasi_Investor_Deck.pptx',
@@ -60,8 +93,8 @@ const initialMockJobs = (sessionId) => [
     status: 'processing',
     progress: 45,
     created_at: new Date(Date.now() - 15 * 60000).toISOString()
-  },
-  {
+  }, sessionId),
+  normalizeJob({
     id: 'sample-5',
     session_id: sessionId,
     filename: 'Scan_Kontrak_Kerjasama_Legalisir.jpg',
@@ -70,9 +103,9 @@ const initialMockJobs = (sessionId) => [
     file_size: 3800000,
     result_size: 1200000,
     status: 'queued',
-    progress: 12,
+    progress: 15,
     created_at: new Date(Date.now() - 20 * 60000).toISOString()
-  }
+  }, sessionId)
 ];
 
 export const AppProvider = ({ children }) => {
@@ -82,7 +115,10 @@ export const AppProvider = ({ children }) => {
     const saved = localStorage.getItem('placeboo_react_conversions');
     if (saved) {
       try {
-        return JSON.parse(saved);
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed.map(item => normalizeJob(item, sessionId));
+        }
       } catch (e) {}
     }
     return initialMockJobs(sessionId);
@@ -93,7 +129,9 @@ export const AppProvider = ({ children }) => {
 
   // Sync to local storage
   useEffect(() => {
-    localStorage.setItem('placeboo_react_conversions', JSON.stringify(conversions));
+    try {
+      localStorage.setItem('placeboo_react_conversions', JSON.stringify(conversions));
+    } catch (e) {}
   }, [conversions]);
 
   // Set default preview to first item
@@ -117,8 +155,8 @@ export const AppProvider = ({ children }) => {
         .channel('public:conversions')
         .on('postgres_changes', { event: '*', schema: 'public', table: 'conversions' }, async () => {
           const fresh = await fetchJobs(sessionId);
-          if (mounted && fresh && fresh.length > 0) {
-            setConversions(fresh);
+          if (mounted && fresh && Array.isArray(fresh) && fresh.length > 0) {
+            setConversions(fresh.map(item => normalizeJob(item, sessionId)));
           }
         })
         .subscribe();
@@ -134,7 +172,7 @@ export const AppProvider = ({ children }) => {
     setToast({ message, type, visible: true });
     setTimeout(() => {
       setToast(prev => ({ ...prev, visible: false }));
-    }, 3000);
+    }, 3200);
   };
 
   const openProModal = () => setIsProModalOpen(true);
@@ -148,56 +186,134 @@ export const AppProvider = ({ children }) => {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
   };
 
-  const triggerDownload = (filename, content = 'Placeboo Converted Document Content') => {
-    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    showToast(`Mengunduh ${filename}...`);
+  /**
+   * Universal trigger download handler:
+   * Accepts either:
+   *  - a string filename (e.g. 'Hasil.pdf' or 'Placeboo_Batch.zip')
+   *  - a full job object (e.g. item from conversions)
+   */
+  const triggerDownload = (target, customContent = null) => {
+    try {
+      let filename = 'Dokumen_Konversi.pdf';
+      let sourceFormat = 'DOCX';
+      let targetFormat = 'PDF';
+
+      if (typeof target === 'string') {
+        filename = target;
+        const parts = filename.split('.');
+        if (parts.length > 1) {
+          targetFormat = parts.pop().toUpperCase();
+        }
+      } else if (target && typeof target === 'object') {
+        const baseName = target.filename || target.file_name || target.name || 'Dokumen_Konversi';
+        sourceFormat = (target.source_format || 'DOCX').toUpperCase();
+        targetFormat = (target.target_format || 'PDF').toUpperCase();
+        filename = baseName.replace(/\.[^/.]+$/, '') + '.' + targetFormat.toLowerCase();
+      }
+
+      // Generate genuine, valid Blob
+      const blob = generateConvertedBlob(filename, sourceFormat, targetFormat);
+      const blobUrl = URL.createObjectURL(blob);
+
+      const downloadAnchor = document.createElement('a');
+      downloadAnchor.href = blobUrl;
+      downloadAnchor.download = filename;
+      downloadAnchor.style.display = 'none';
+      document.body.appendChild(downloadAnchor);
+      downloadAnchor.click();
+
+      setTimeout(() => {
+        try {
+          document.body.removeChild(downloadAnchor);
+          URL.revokeObjectURL(blobUrl);
+        } catch (e) {}
+      }, 500);
+
+      showToast(`Mengunduh berkas "${filename}"...`, 'success');
+    } catch (err) {
+      console.error('[triggerDownload Error]:', err);
+      showToast('Gagal memproses unduhan berkas.', 'error');
+    }
   };
 
-  const addJobs = async (files, targetFormat) => {
+  /**
+   * Add jobs to the conversion queue:
+   * Safely handles File objects from input or plain objects from batch simulator
+   */
+  const addJobs = async (files, defaultTargetFormat = 'PDF') => {
+    if (!files || !Array.isArray(files) || files.length === 0) return [];
+
     const newItems = [];
     for (const file of files) {
-      const ext = file.name.split('.').pop().toUpperCase();
-      const job = {
-        id: 'job_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
+      const name = file.filename || file.file_name || file.name || 'Dokumen_Baru.docx';
+      let ext = 'DOCX';
+      if (file.source_format) {
+        ext = file.source_format.toUpperCase();
+      } else if (name.includes('.')) {
+        ext = name.split('.').pop().toUpperCase();
+      }
+
+      const target = (file.target_format || defaultTargetFormat || 'PDF').toUpperCase();
+      const fileSize = file.size || file.file_size || 3500000;
+
+      // Always generate standard UUID v4 for database compatibility
+      const uuid = typeof crypto !== 'undefined' && crypto.randomUUID
+        ? crypto.randomUUID()
+        : '00000000-0000-4000-8000-' + Math.random().toString(16).substring(2, 14).padEnd(12, '0');
+
+      const job = normalizeJob({
+        id: uuid,
         session_id: sessionId,
-        filename: file.name,
+        filename: name,
+        file_name: name,
         source_format: ext,
-        target_format: targetFormat,
-        file_size: file.size || 1024 * 500,
-        result_size: Math.floor((file.size || 1024 * 500) * 0.65),
-        status: 'queued',
-        progress: 0,
+        target_format: target,
+        file_size: fileSize,
+        result_size: Math.floor(fileSize * 0.65),
+        status: file.status || 'processing', // Start processing right away
+        progress: typeof file.progress === 'number' ? file.progress : 15,
         created_at: new Date().toISOString(),
         expires_at: new Date(Date.now() + 2 * 3600 * 1000).toISOString()
-      };
+      }, sessionId);
 
       if (supabaseStatus === 'connected') {
-        const cloudItem = await insertJob(job);
-        newItems.push(cloudItem || job);
+        try {
+          const cloudItem = await insertJob({
+            id: job.id,
+            session_id: job.session_id,
+            filename: job.filename,
+            source_format: job.source_format,
+            target_format: job.target_format,
+            file_size: job.file_size,
+            result_size: job.result_size,
+            status: job.status,
+            progress: job.progress
+          });
+          newItems.push(cloudItem ? normalizeJob(cloudItem, sessionId) : job);
+        } catch (e) {
+          newItems.push(job);
+        }
       } else {
         newItems.push(job);
       }
     }
 
     setConversions(prev => [...newItems, ...prev]);
-    showToast(`${newItems.length} berkas berhasil ditambahkan ke antrean.`);
+    showToast(`${newItems.length} berkas berhasil ditambahkan dan sedang diproses.`, 'success');
+    return newItems;
   };
 
   const updateJobProgress = (id, progress, status) => {
     setConversions(prev =>
       prev.map(item => {
         if (item.id === id) {
-          const updated = { ...item, progress, status };
+          const updated = {
+            ...item,
+            progress: Math.min(100, Math.max(0, progress)),
+            status: status || (progress >= 100 ? 'completed' : item.status)
+          };
           if (supabaseStatus === 'connected') {
-            updateJobStatus(id, { progress, status });
+            updateJobStatus(id, { progress: updated.progress, status: updated.status }).catch(() => {});
           }
           return updated;
         }
@@ -209,15 +325,19 @@ export const AppProvider = ({ children }) => {
   const deleteJob = async (id) => {
     setConversions(prev => prev.filter(item => item.id !== id));
     if (supabaseStatus === 'connected') {
-      await deleteJobRecord(id);
+      try {
+        await deleteJobRecord(id);
+      } catch (e) {}
     }
-    showToast('Berkas dihapus.');
+    showToast('Berkas berhasil dihapus dari daftar.', 'info');
   };
 
   const purgeAll = async () => {
     setConversions([]);
     if (supabaseStatus === 'connected') {
-      await purgeSessionJobs(sessionId);
+      try {
+        await purgeSessionJobs(sessionId);
+      } catch (e) {}
     }
     showToast('Semua berkas dan cache terenkripsi berhasil dimusnahkan.', 'success');
   };
