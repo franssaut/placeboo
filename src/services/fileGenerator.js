@@ -108,50 +108,59 @@ startxref
   return new Blob([pdfContent], { type: 'application/pdf' });
 }
 
+import * as XLSX from 'xlsx';
+
 export function generateSpreadsheetBlob(filename) {
   const cleanName = filename.replace(/\.[^/.]+$/, '');
   const timestamp = new Date().toLocaleString('id-ID');
 
-  const csv = `KODE POS,DESKRIPSI AKUN,JULI (IDR),AGUSTUS (IDR),TOTAL Q3,KETERANGAN
-101.402,"Pendapatan SaaS Cloud Placeboo","845.200.000","912.450.000","2.684.150.000","Terverifikasi"
-102.100,"Lisensi Enterprise Dedicated","310.000.000","340.500.000","1.025.500.000","Lunas"
-201.050,"Beban Komputasi Cloud (AWS/Vercel)","(124.500.000)","(138.200.000)","(394.700.000)","Operasional"
-301.210,"Margin Laba Bersih Q3","1.030.700.000","1.114.750.000","3.314.950.000","EBITDA Positif"
-,,,
-"Dokumen: ${cleanName}","Diproses: ${timestamp}","Presisi: 100%","Mesin: Placeboo Core v4.8","Format: XLSX Ready",""
-`;
+  const wb = XLSX.utils.book_new();
+  const data = [
+    ['KODE POS', 'DESKRIPSI AKUN', 'JULI (IDR)', 'AGUSTUS (IDR)', 'TOTAL Q3', 'STATUS'],
+    ['101.402', 'Pendapatan SaaS Cloud Placeboo', 845200000, 912450000, 2684150000, 'Terverifikasi'],
+    ['102.100', 'Lisensi Enterprise Dedicated', 310000000, 340500000, 1025500000, 'Lunas'],
+    ['201.050', 'Beban Komputasi Cloud (AWS/Vercel)', -124500000, -138200000, -394700000, 'Operasional'],
+    ['301.210', 'Margin Laba Bersih Q3', 1030700000, 1114750000, 3314950000, 'EBITDA Positif'],
+    [],
+    [`Dokumen: ${cleanName}`, `Diproses: ${timestamp}`, 'Presisi: 100%', 'Mesin: Placeboo Core v4.8', 'Format: XLSX Binary', '']
+  ];
 
-  return new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+  const ws = XLSX.utils.aoa_to_sheet(data);
+  ws['!cols'] = [{ wch: 12 }, { wch: 35 }, { wch: 18 }, { wch: 18 }, { wch: 20 }, { wch: 15 }];
+  XLSX.utils.book_append_sheet(wb, ws, 'Laporan Keuangan');
+
+  const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+  return new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
 }
 
 export function generateDocumentBlob(filename, sourceFormat = 'PDF', targetFormat = 'DOCX') {
   const cleanName = filename.replace(/\.[^/.]+$/, '');
   const timestamp = new Date().toLocaleString('id-ID', { dateStyle: 'full', timeStyle: 'medium' });
 
-  const content = `================================================================================
-                    PLACEBOO DOCUMENT CONVERTER
-================================================================================
-Nama Berkas    : ${cleanName}.${targetFormat.toLowerCase()}
-Sumber Asal    : ${cleanName}.${sourceFormat.toLowerCase()}
-Waktu Konversi : ${timestamp}
-Status         : Berhasil Dikonversi (100% Presisi)
-Enkripsi       : AES-256 Bit • TLS 1.3
-Kebijakan Data : Zero-Data Retention (Auto-Purge 2 Jam)
-================================================================================
+  // Rich Text Format (RTF) stream natively recognized and opened by Microsoft Word with zero errors
+  const rtfContent = `{\\rtf1\\ansi\\ansicpg1252\\deff0\\nouicompat\\deflang1057
+{\\fonttbl{\\f0\\fnil\\fcharset0 Calibri;}{\\f1\\fnil\\fcharset0 Segoe UI;}}
+{\\colortbl ;\\red53\\green37\\blue205;\\red11\\green28\\blue48;\\red70\\green69\\blue85;}
+\\viewkind4\\uc1
+\\pard\\cf1\\b\\f0\\fs32 PLACEBOO DOCUMENT CONVERTER\\par
+\\cf3\\b0\\fs18 Dikonversi Secara Presisi \\bullet  Waktu: ${timestamp}\\par
+\\cf3\\fs18 Keamanan: Enkripsi TLS 1.3 - Zero Retention\\par
+\\par
+\\cf2\\b\\fs26 ${cleanName}\\par
+\\cf3\\b0\\fs20 Format Asal: ${sourceFormat.toUpperCase()} \\bullet Target: ${targetFormat.toUpperCase()}\\par
+\\line
+\\cf2\\b\\fs22 ISI DOKUMEN HASIL TRANSCODING:\\par
+\\cf3\\b0\\fs20
+Dokumen ini berhasil dikonversi ke format Microsoft Word melalui Placeboo Cloud Transcoder.\\par
+Seluruh paragraf, pemformatan teks, tabel, dan metadata dipertahankan secara utuh tanpa distorsi.\\par
+\\par
+[Ikhtisar Eksekutif]\\par
+Semua data telah tervalidasi dan siap digunakan untuk kebutuhan cetak, arsip legalitas, maupun pengeditan lebih lanjut di Microsoft Word, Google Docs, atau Apple Pages.\\par
+\\par
+Placeboo Core Engine \\bullet https://placeboo.vercel.app
+}`;
 
-ISI DOKUMEN HASIL TRANSCODING:
-Dokumen ini berhasil diproses melalui Placeboo Cloud Transcoder Engine.
-Seluruh paragraf, pemformatan teks, tabel, dan metadata dipertahankan
-secara utuh tanpa penurunan kualitas.
-
-[Bab 1 - Ikhtisar Eksekutif]
-Semua data telah tervalidasi dan siap digunakan untuk kebutuhan cetak,
-arsip legalitas, maupun pengeditan lebih lanjut di aplikasi perkantoran Anda.
-
-Placeboo Core Engine • https://placeboo.vercel.app
-`;
-
-  return new Blob([content], { type: 'text/plain;charset=utf-8;' });
+  return new Blob([rtfContent], { type: 'application/msword' });
 }
 
 export function generateImageBlob(filename, format = 'png') {

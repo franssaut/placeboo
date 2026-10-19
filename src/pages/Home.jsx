@@ -34,6 +34,13 @@ export default function Home() {
     setLastConvertedJob(null);
     setIsConvertingHome(false);
 
+    const ext = files[0].name.includes('.') ? files[0].name.split('.').pop().toLowerCase() : '';
+    if (ext === 'pdf' && targetFormat.toUpperCase() === 'PDF') {
+      setTargetFormat('DOCX');
+    } else if (['jpg', 'jpeg', 'png', 'webp', 'docx', 'xlsx', 'txt'].includes(ext) && targetFormat.toLowerCase() === ext) {
+      setTargetFormat('PDF');
+    }
+
     if (!isBatchMode) {
       setSelectedFiles([files[0]]);
     } else {
@@ -57,6 +64,13 @@ export default function Home() {
 
     setLastConvertedJob(null);
     setIsConvertingHome(false);
+
+    const ext = files[0].name.includes('.') ? files[0].name.split('.').pop().toLowerCase() : '';
+    if (ext === 'pdf' && targetFormat.toUpperCase() === 'PDF') {
+      setTargetFormat('DOCX');
+    } else if (['jpg', 'jpeg', 'png', 'webp', 'docx', 'xlsx', 'txt'].includes(ext) && targetFormat.toLowerCase() === ext) {
+      setTargetFormat('PDF');
+    }
 
     if (!isBatchMode) {
       setSelectedFiles([files[0]]);
@@ -82,14 +96,11 @@ export default function Home() {
   };
 
   const handleStartConversion = async () => {
-    // If no file selected, create a friendly sample file so user can test convert instantly!
     let filesToProcess = selectedFiles;
     if (filesToProcess.length === 0) {
-      const sampleBlob = new Blob(['Placeboo Sample Content'], { type: 'text/plain' });
-      const sampleFile = new File([sampleBlob], 'Proposal_Tender_Infrastruktur.docx', { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
-      filesToProcess = [sampleFile];
-      setSelectedFiles(filesToProcess);
-      showToast('Memuat dokumen contoh untuk konversi instan...', 'info');
+      showToast('Pilih berkas dari komputer atau tarik ke sini terlebih dahulu', 'warning');
+      fileInputRef.current?.click();
+      return;
     }
 
     if (isBatchMode && filesToProcess.length > 1) {
@@ -538,8 +549,12 @@ export default function Home() {
                 key={idx}
                 onClick={() => {
                   setTargetFormat(tool.format);
+                  if (tool.tag.includes('MULTI-PAGE')) {
+                    setIsBatchMode(true);
+                  }
                   window.scrollTo({ top: 120, behavior: 'smooth' });
-                  showToast(`Format konversi dialihkan ke ${tool.format}`, 'info');
+                  fileInputRef.current?.click();
+                  showToast(`Alat "${tool.title}" aktif. Pilih berkas untuk dikonversi.`, 'info');
                 }}
                 className="p-space-lg rounded-xl bg-surface-container-lowest shadow-sm hover:shadow-md hover:-translate-y-1 transition-all group block cursor-pointer border border-outline-variant/15"
               >

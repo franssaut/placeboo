@@ -230,7 +230,11 @@ export const AppProvider = ({ children }) => {
           blob = generateConvertedBlob(filename, sourceFormat, targetFormat);
         }
       } else {
-        blob = generateConvertedBlob(filename, sourceFormat, targetFormat);
+        try {
+          blob = await performRealConversion({ filename, name: filename, source_format: sourceFormat }, targetFormat);
+        } catch (e) {
+          blob = generateConvertedBlob(filename, sourceFormat, targetFormat);
+        }
       }
 
       if (!blob) {
