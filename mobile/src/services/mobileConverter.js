@@ -473,6 +473,8 @@ export async function shareFileNative(
  * Saves all individual page images to a user-selected folder (Downloads/Pictures) via SAF.
  * Allows users to easily attach and send all images at once from WhatsApp Gallery.
  */
+let lastKnownDirectoryUri = null;
+
 export async function saveAllPagesToStorage(pages, baseFileName = 'dokumen') {
   try {
     const saf = FileSystemLegacy.StorageAccessFramework || FileSystemNew.StorageAccessFramework;
@@ -480,12 +482,16 @@ export async function saveAllPagesToStorage(pages, baseFileName = 'dokumen') {
       return { success: false, error: 'Fitur penyimpanan folder tidak didukung pada sistem ini.' };
     }
 
-    const permissions = await saf.requestDirectoryPermissionsAsync();
-    if (!permissions.granted) {
-      return { success: false, error: 'Pemilihan folder dibatalkan.' };
+    let directoryUri = lastKnownDirectoryUri;
+    if (!directoryUri) {
+      const permissions = await saf.requestDirectoryPermissionsAsync();
+      if (!permissions.granted) {
+        return { success: false, error: 'Pemilihan folder dibatalkan.' };
+      }
+      directoryUri = permissions.directoryUri;
+      lastKnownDirectoryUri = directoryUri;
     }
 
-    const directoryUri = permissions.directoryUri;
     let savedCount = 0;
 
     for (let i = 0; i < pages.length; i++) {
@@ -499,11 +505,26 @@ export async function saveAllPagesToStorage(pages, baseFileName = 'dokumen') {
       const base64Data = await readFileAsBase64(page.uri);
       if (!base64Data) continue;
 
-      const createdFileUri = await saf.createFileAsync(directoryUri, fileName, mime);
-      await saf.writeAsStringAsync(createdFileUri, base64Data, {
-        encoding: FileSystemLegacy.EncodingType?.Base64 || 'base64'
-      });
-      savedCount++;
+      try {
+        const createdFileUri = await saf.createFileAsync(directoryUri, fileName, mime);
+        await saf.writeAsStringAsync(createdFileUri, base64Data, {
+          encoding: FileSystemLegacy.EncodingType?.Base64 || 'base64'
+        });
+        savedCount++;
+      } catch (writeErr) {
+        // If cached directory expired or invalid, reset and prompt once
+        lastKnownDirectoryUri = null;
+        const newPerm = await saf.requestDirectoryPermissionsAsync();
+        if (newPerm.granted) {
+          directoryUri = newPerm.directoryUri;
+          lastKnownDirectoryUri = directoryUri;
+          const retryFileUri = await saf.createFileAsync(directoryUri, fileName, mime);
+          await saf.writeAsStringAsync(retryFileUri, base64Data, {
+            encoding: FileSystemLegacy.EncodingType?.Base64 || 'base64'
+          });
+          savedCount++;
+        }
+      }
     }
 
     return { success: true, count: savedCount };

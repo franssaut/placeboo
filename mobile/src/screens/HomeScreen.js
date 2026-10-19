@@ -365,12 +365,13 @@ export default function HomeScreen({ mode = 'pdf_to_image', onModeChange }) {
     setIsSavingStorage(false);
 
     if (res.success) {
+      const pageNumStr = selectedList.map((p) => p.pageNumber).filter(Boolean).join(', ');
       const msg = res.fallbackSAF
-        ? `${res.count} lembar foto terpilih berhasil disimpan ke folder penyimpanan ponsel Anda.`
-        : `${res.count} lembar foto terpilih berhasil disimpan langsung ke Galeri Foto ponsel Anda!\n\nAnda dapat membuka WhatsApp sekarang dan melampirkan foto tersebut langsung dari album Galeri.`;
+        ? `Semua ${res.count} lembar foto yang Anda pilih (${pageNumStr ? `Hal. ${pageNumStr}` : ''}) berhasil di-download dan disimpan ke folder penyimpanan ponsel Anda.`
+        : `Semua ${res.count} lembar foto yang Anda pilih (${pageNumStr ? `Hal. ${pageNumStr}` : ''}) berhasil di-download langsung ke Galeri Foto ponsel Anda!\n\nAnda dapat membuka WhatsApp sekarang dan melampirkan seluruh foto tersebut dari galeri.`;
 
       Alert.alert(
-        'Berhasil Di-download!',
+        'Semua Halaman Terpilih Berhasil Di-download!',
         msg,
         [
           { text: 'Tutup', style: 'cancel' },
@@ -783,89 +784,7 @@ export default function HomeScreen({ mode = 'pdf_to_image', onModeChange }) {
 
             {isPdfToImage && convertedResult.pages && convertedResult.pages.length > 1 ? (
               <View style={styles.multiShareContainer}>
-                {/* 1. Tombol Download Halaman Terpilih di Galeri */}
-                <TouchableOpacity
-                  style={[
-                    styles.btnSaveAllStorage,
-                    selectedPageIndices.length === 0 && styles.btnActionDisabled
-                  ]}
-                  onPress={handleSaveSelectedToDevice}
-                  disabled={isSavingStorage || selectedPageIndices.length === 0}
-                  activeOpacity={0.8}
-                >
-                  {isSavingStorage ? (
-                    <ActivityIndicator size="small" color="#ffffff" />
-                  ) : (
-                    <MaterialIcons name="file-download" size={26} color="#ffffff" />
-                  )}
-                  <View style={styles.btnSaveAllStorageContent}>
-                    <Text style={styles.btnSaveAllStorageTitle}>
-                      {selectedPageIndices.length === convertedResult.pages.length
-                        ? `Download Semua (${convertedResult.pages.length}) File Halaman`
-                        : selectedPageIndices.length > 0
-                        ? `Download (${selectedPageIndices.length}) Halaman Terpilih`
-                        : 'Pilih Halaman untuk Di-download'}
-                    </Text>
-                    <Text style={styles.btnSaveAllStorageSub}>
-                      {selectedPageIndices.length > 0
-                        ? `Download & simpan ${
-                            selectedPageIndices.length === convertedResult.pages.length
-                              ? 'seluruh lembar'
-                              : `Hal. ${selectedPageIndices
-                                  .map((i) => convertedResult.pages[i]?.pageNumber || i + 1)
-                                  .join(', ')}`
-                          } langsung ke Galeri HP (tanpa ribet pilih folder)`
-                        : 'Centang halaman di bawah yang ingin Anda download ke galeri'}
-                    </Text>
-                  </View>
-                </TouchableOpacity>
-
-                {/* 2. Tombol Kirim Halaman Terpilih ke WhatsApp */}
-                <TouchableOpacity
-                  style={[
-                    styles.btnShareWhatsAppPrimary,
-                    selectedPageIndices.length === 0 && styles.btnActionDisabled
-                  ]}
-                  onPress={handleShareSelectedPages}
-                  disabled={selectedPageIndices.length === 0}
-                  activeOpacity={0.8}
-                >
-                  <FontAwesome name="whatsapp" size={26} color="#ffffff" />
-                  <View style={styles.btnShareWhatsAppPrimaryContent}>
-                    <Text style={styles.btnShareWhatsAppPrimaryTitle}>
-                      {selectedPageIndices.length === convertedResult.pages.length
-                        ? 'Kirim Semua Halaman ke WhatsApp'
-                        : selectedPageIndices.length > 0
-                        ? `Kirim ${selectedPageIndices.length} Halaman Terpilih ke WhatsApp`
-                        : 'Pilih Halaman untuk Dikirim ke WhatsApp'}
-                    </Text>
-                    <Text style={styles.btnShareWhatsAppPrimarySub}>
-                      {selectedPageIndices.length > 0
-                        ? `Kirim ${
-                            selectedPageIndices.length === convertedResult.pages.length
-                              ? 'semua lembar'
-                              : `Hal. ${selectedPageIndices
-                                  .map((i) => convertedResult.pages[i]?.pageNumber || i + 1)
-                                  .join(', ')}`
-                          } satu per satu (bukan 1 halaman panjang)`
-                        : 'Centang halaman di bawah yang ingin Anda kirim ke WhatsApp'}
-                    </Text>
-                  </View>
-                </TouchableOpacity>
-
-                {/* 3. Tombol Kirim Halaman Aktif Saja ke WhatsApp */}
-                <TouchableOpacity
-                  style={styles.btnShareWhatsAppSingle}
-                  onPress={() => handleSharePage(activePdfPageIdx)}
-                  activeOpacity={0.8}
-                >
-                  <FontAwesome name="whatsapp" size={18} color="#15803d" />
-                  <Text style={styles.btnShareWhatsAppSingleText}>
-                    Kirim Halaman {activePdfPageIdx + 1} Saja ke WhatsApp (Hal. {activePdfPageIdx + 1} dari {convertedResult.pages.length})
-                  </Text>
-                </TouchableOpacity>
-
-                {/* 4. Fitur Pilih Halaman Mana Saja yang Bisa Dikirim */}
+                {/* 1. Fitur Pilih Halaman Mana Saja yang Bisa Di-download & Dikirim */}
                 <View style={styles.pagesListSection}>
                   <View style={styles.pagesListHeaderRow}>
                     <View style={styles.pagesListHeaderTitleGroup}>
@@ -917,7 +836,7 @@ export default function HomeScreen({ mode = 'pdf_to_image', onModeChange }) {
                   </View>
 
                   <Text style={styles.pagesListSub}>
-                    Ketuk lembar foto mana saja untuk memilih/mencentang halaman yang ingin dikirim:
+                    Ketuk lembar foto mana saja untuk memilih/mencentang halaman yang ingin Anda download atau kirim:
                   </Text>
 
                   <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.pagesListScroll}>
@@ -1023,6 +942,88 @@ export default function HomeScreen({ mode = 'pdf_to_image', onModeChange }) {
                     })}
                   </ScrollView>
                 </View>
+
+                {/* 2. Tombol Download Semua Halaman yang Dipilih Langsung */}
+                <TouchableOpacity
+                  style={[
+                    styles.btnSaveAllStorage,
+                    selectedPageIndices.length === 0 && styles.btnActionDisabled
+                  ]}
+                  onPress={handleSaveSelectedToDevice}
+                  disabled={isSavingStorage || selectedPageIndices.length === 0}
+                  activeOpacity={0.8}
+                >
+                  {isSavingStorage ? (
+                    <ActivityIndicator size="small" color="#ffffff" />
+                  ) : (
+                    <MaterialIcons name="file-download" size={26} color="#ffffff" />
+                  )}
+                  <View style={styles.btnSaveAllStorageContent}>
+                    <Text style={styles.btnSaveAllStorageTitle}>
+                      {selectedPageIndices.length === convertedResult.pages.length
+                        ? `Download Semua (${convertedResult.pages.length}) Halaman yang Dipilih Langsung`
+                        : selectedPageIndices.length > 0
+                        ? `Download (${selectedPageIndices.length}) Halaman yang Dipilih Langsung`
+                        : 'Pilih Halaman untuk Di-download Langsung'}
+                    </Text>
+                    <Text style={styles.btnSaveAllStorageSub}>
+                      {selectedPageIndices.length > 0
+                        ? `Download & simpan ${
+                            selectedPageIndices.length === convertedResult.pages.length
+                              ? `seluruh ${convertedResult.pages.length} lembar file foto`
+                              : `${selectedPageIndices.length} lembar terpilih (Hal. ${selectedPageIndices
+                                  .map((i) => convertedResult.pages[i]?.pageNumber || i + 1)
+                                  .join(', ')})`
+                          } sekaligus langsung ke Galeri / Download HP`
+                        : 'Centang lembar halaman di atas yang ingin Anda download ke galeri'}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+
+                {/* 3. Tombol Kirim Semua Halaman yang Dipilih ke WhatsApp */}
+                <TouchableOpacity
+                  style={[
+                    styles.btnShareWhatsAppPrimary,
+                    selectedPageIndices.length === 0 && styles.btnActionDisabled
+                  ]}
+                  onPress={handleShareSelectedPages}
+                  disabled={selectedPageIndices.length === 0}
+                  activeOpacity={0.8}
+                >
+                  <FontAwesome name="whatsapp" size={26} color="#ffffff" />
+                  <View style={styles.btnShareWhatsAppPrimaryContent}>
+                    <Text style={styles.btnShareWhatsAppPrimaryTitle}>
+                      {selectedPageIndices.length === convertedResult.pages.length
+                        ? 'Kirim Semua Halaman yang Dipilih ke WhatsApp'
+                        : selectedPageIndices.length > 0
+                        ? `Kirim (${selectedPageIndices.length}) Halaman Terpilih ke WhatsApp`
+                        : 'Pilih Halaman untuk Dikirim ke WhatsApp'}
+                    </Text>
+                    <Text style={styles.btnShareWhatsAppPrimarySub}>
+                      {selectedPageIndices.length > 0
+                        ? `Kirim ${
+                            selectedPageIndices.length === convertedResult.pages.length
+                              ? 'semua lembar'
+                              : `Hal. ${selectedPageIndices
+                                  .map((i) => convertedResult.pages[i]?.pageNumber || i + 1)
+                                  .join(', ')}`
+                          } satu per satu (bukan 1 halaman panjang)`
+                        : 'Centang lembar halaman di atas yang ingin Anda kirim ke WhatsApp'}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+
+                {/* 4. Tombol Kirim Halaman Aktif Saja ke WhatsApp */}
+                <TouchableOpacity
+                  style={styles.btnShareWhatsAppSingle}
+                  onPress={() => handleSharePage(activePdfPageIdx)}
+                  activeOpacity={0.8}
+                >
+                  <FontAwesome name="whatsapp" size={18} color="#15803d" />
+                  <Text style={styles.btnShareWhatsAppSingleText}>
+                    Kirim Halaman {activePdfPageIdx + 1} Saja ke WhatsApp (Hal. {activePdfPageIdx + 1} dari {convertedResult.pages.length})
+                  </Text>
+                </TouchableOpacity>
 
                 {/* 5. Reset Button */}
                 <TouchableOpacity style={styles.btnResetFull} onPress={handleReset}>
