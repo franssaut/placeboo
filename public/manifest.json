@@ -1,0 +1,76 @@
+{
+  "id": "/",
+  "name": "Placeboo - Konversi Dokumen & Gambar Cepat",
+  "short_name": "Placeboo",
+  "description": "Konversi PDF ke Gambar, Gambar ke PDF, Word, Excel, dan format lainnya secara instan, aman, dan langsung di perangkat.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["standalone", "window-controls-overlay", "minimal-ui"],
+  "orientation": "portrait-primary",
+  "background_color": "#f8f9ff",
+  "theme_color": "#4f46e5",
+  "lang": "id",
+  "dir": "ltr",
+  "categories": ["productivity", "utilities", "business", "tools"],
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "/screenshots/screenshot1.png",
+      "sizes": "1280x720",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "Beranda Konverter Dokumen"
+    },
+    {
+      "src": "/screenshots/screenshot2.png",
+      "sizes": "1280x720",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "Hasil Unduhan & Bagikan Dokumen"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "PDF ke Gambar",
+      "short_name": "PDF → Gambar",
+      "description": "Ubah dokumen PDF ke gambar beresolusi tinggi",
+      "url": "/?mode=pdf-to-image",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Gambar ke PDF",
+      "short_name": "Gambar → PDF",
+      "description": "Gabungkan banyak foto/gambar menjadi 1 file PDF",
+      "url": "/?mode=image-to-pdf",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Semua Alat Konverter",
+      "short_name": "Semua Alat",
+      "description": "Jelajahi 42+ alat konversi dokumen lengkap",
+      "url": "/semua-alat",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+    }
+  ],
+  "prefer_related_applications": false
+}

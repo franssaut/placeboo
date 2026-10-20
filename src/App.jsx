@@ -3,6 +3,7 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
 import Toast from './components/Toast';
+import PWAInstallPrompt from './components/PWAInstallPrompt';
 import Home from './pages/Home';
 import Catalog from './pages/Catalog';
 
@@ -19,6 +20,7 @@ export default function App() {
       </div>
       <Footer />
       <Toast />
+      <PWAInstallPrompt />
     </div>
   );
 }

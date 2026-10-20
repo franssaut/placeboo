@@ -41,6 +41,16 @@ export default function Navbar() {
         </div>
 
         <div className="flex items-center gap-space-md flex-shrink-0">
+          <button
+            type="button"
+            onClick={() => window.dispatchEvent(new CustomEvent('open-pwa-install'))}
+            className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/10 text-primary hover:bg-primary/20 text-xs font-semibold transition-all border border-primary/20"
+            title="Pasang Aplikasi Placeboo di HP / Komputer"
+          >
+            <span className="material-symbols-outlined text-[16px]">install_mobile</span>
+            <span>Pasang App</span>
+          </button>
+
           <div className="relative hidden lg:block w-52">
             <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-[18px]">
               search
@@ -120,6 +130,18 @@ export default function Navbar() {
                   <span className="material-symbols-outlined text-[20px]">grid_view</span>
                   Semua Alat (42+)
                 </NavLink>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMobileMenuOpen(false);
+                    window.dispatchEvent(new CustomEvent('open-pwa-install'));
+                  }}
+                  className="w-full mt-3 flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl text-sm font-semibold bg-primary text-white shadow-md active:scale-95 transition-all"
+                >
+                  <span className="material-symbols-outlined text-[18px]">install_mobile</span>
+                  Pasang Aplikasi di HP
+                </button>
               </nav>
             </div>
 

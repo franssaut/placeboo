@@ -2,7 +2,23 @@
 <html lang="id">
 <head>
   <meta charset="utf-8">
-  <meta content="width=device-width, initial-scale=1.0" name="viewport">
+  <meta content="width=device-width, initial-scale=1.0, maximum-scale=5.0" name="viewport">
+  <meta name="description" content="Placeboo - Platform konversi dokumen multi-format super cepat, aman, dan langsung di perangkat.">
+
+  <!-- PWA Meta Tags -->
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png">
+  <link rel="apple-touch-icon" sizes="192x192" href="/icons/icon-192.png">
+  <link rel="apple-touch-icon" sizes="512x512" href="/icons/icon-512.png">
+  <meta name="theme-color" content="#4f46e5">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Placeboo">
+  <meta name="application-name" content="Placeboo">
+  <meta name="msapplication-TileColor" content="#4f46e5">
   <title>Placeboo - Konversi Dokumen Cepat &amp; Aman</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -130,5 +146,18 @@
 <body class="bg-background font-body-md text-on-surface antialiased min-h-screen flex flex-col">
   <div id="root"></div>
   <script type="module" src="/src/main.jsx"></script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js')
+          .then((reg) => {
+            console.log('[Placeboo PWA] Service Worker aktif:', reg.scope);
+          })
+          .catch((err) => {
+            console.warn('[Placeboo PWA] Service Worker gagal registrasi:', err);
+          });
+      });
+    }
+  </script>
 </body>
 </html>
