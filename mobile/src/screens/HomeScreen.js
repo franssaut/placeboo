@@ -486,7 +486,14 @@ export default function HomeScreen({ mode = 'pdf_to_image', onModeChange }) {
       {/* Header Banner */}
       <View style={styles.header}>
         <View style={styles.brandRow}>
-          <Text style={styles.brandTitle}>Placeboo</Text>
+          <View style={styles.brandGroup}>
+            <Image
+              source={require('../../assets/logo.png')}
+              style={styles.brandLogo}
+              resizeMode="contain"
+            />
+            <Text style={styles.brandTitle}>Placeboo</Text>
+          </View>
           <View style={styles.badgeSecure}>
             <MaterialIcons name="lock" size={12} color="#10b981" />
             <Text style={styles.badgeSecureText}>Zero Retention</Text>
@@ -1268,6 +1275,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between'
+  },
+  brandGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10
+  },
+  brandLogo: {
+    width: 34,
+    height: 34
   },
   brandTitle: {
     fontSize: 26,

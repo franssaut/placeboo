@@ -24,7 +24,12 @@ export default function Navbar() {
     <header className="fixed top-0 left-0 right-0 z-50 bg-surface-container-lowest/85 backdrop-blur-xl shadow-[0_1px_8px_rgba(15,23,42,0.05)]">
       <div className="h-16 max-w-7xl mx-auto px-margin flex items-center justify-between gap-gutter">
         <div className="flex items-center gap-gutter">
-          <NavLink to="/" className="flex items-center gap-space-sm flex-shrink-0">
+          <NavLink to="/" className="flex items-center gap-2.5 flex-shrink-0 group">
+            <img
+              src="/logo.png"
+              alt="Placeboo Logo"
+              className="w-9 h-9 object-contain drop-shadow-sm group-hover:scale-105 transition-transform"
+            />
             <span className="font-headline-sm text-headline-sm text-on-surface tracking-tight font-bold">
               Placeboo
             </span>
@@ -88,9 +93,16 @@ export default function Navbar() {
           >
             <div className="space-y-6">
               <div className="flex items-center justify-between pb-4 border-b border-outline-variant/20">
-                <span className="font-headline-sm text-headline-sm text-on-surface tracking-tight font-bold">
-                  Placeboo
-                </span>
+                <div className="flex items-center gap-2.5">
+                  <img
+                    src="/logo.png"
+                    alt="Placeboo Logo"
+                    className="w-8 h-8 object-contain"
+                  />
+                  <span className="font-headline-sm text-headline-sm text-on-surface tracking-tight font-bold">
+                    Placeboo
+                  </span>
+                </div>
                 <button
                   onClick={() => setMobileMenuOpen(false)}
                   className="w-8 h-8 rounded-lg bg-surface-container-low flex items-center justify-center text-on-surface-variant"

@@ -385,7 +385,12 @@ export default function MobilePWAConverter() {
   return (
     <div className="w-full max-w-lg mx-auto px-4 py-4 sm:py-6">
       {/* 1. Header Title & Badge */}
-      <div className="text-center mb-5">
+      <div className="text-center mb-5 flex flex-col items-center">
+        <img
+          src="/logo.png"
+          alt="Placeboo Mascot"
+          className="w-16 h-16 object-contain mb-2 drop-shadow-md hover:scale-105 transition-transform"
+        />
         <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-primary/10 text-primary text-xs font-bold mb-2">
           <span className="w-2 h-2 rounded-full bg-primary animate-pulse"></span>
           Placeboo Mobile PWA

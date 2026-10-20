@@ -7,7 +7,12 @@ export default function Footer() {
       <div className="max-w-7xl mx-auto px-margin py-space-xl">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-space-xl mb-space-xl">
           <div className="lg:col-span-2 space-y-space-md">
-            <div className="flex items-center gap-space-sm">
+            <div className="flex items-center gap-2.5">
+              <img
+                src="/logo.png"
+                alt="Placeboo Logo"
+                className="w-8 h-8 object-contain"
+              />
               <span className="font-headline-sm text-headline-sm text-on-surface font-bold">Placeboo</span>
             </div>
             <p className="font-body-sm text-body-sm text-on-surface-variant max-w-sm">
