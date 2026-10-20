@@ -190,39 +190,6 @@ export default function Home() {
               </p>
             </div>
 
-            {/* PWA Mobile App Callout Card */}
-            <div className="mt-6 max-w-4xl mx-auto">
-              <div className="bg-gradient-to-r from-primary/10 via-surface-container to-secondary/10 border border-primary/20 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-sm">
-                <div className="flex items-center gap-3.5 text-center sm:text-left">
-                  <div className="w-12 h-12 rounded-xl bg-primary text-white flex-shrink-0 flex items-center justify-center shadow-md overflow-hidden">
-                    <img src="/icons/icon-192.png" alt="Placeboo" className="w-full h-full object-cover" />
-                  </div>
-                  <div>
-                    <div className="flex items-center justify-center sm:justify-start gap-2">
-                      <h3 className="font-bold text-sm sm:text-base text-on-surface">
-                        Aplikasi Mobile Placeboo Tersedia
-                      </h3>
-                      <span className="bg-emerald-500/10 text-emerald-600 text-[10px] font-extrabold px-2 py-0.5 rounded-full border border-emerald-500/20">
-                        PWA CEPAT
-                      </span>
-                    </div>
-                    <p className="text-xs text-on-surface-variant mt-0.5">
-                      Pasang di layar utama HP Anda. Langsung buka tanpa browser, lebih cepat & hemat kuota.
-                    </p>
-                  </div>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => window.dispatchEvent(new CustomEvent('open-pwa-install'))}
-                  className="w-full sm:w-auto flex-shrink-0 inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-primary text-white font-bold text-xs shadow-md hover:bg-primary/90 active:scale-95 transition-all"
-                >
-                  <span className="material-symbols-outlined text-[18px]">install_mobile</span>
-                  <span>Pasang Aplikasi</span>
-                </button>
-              </div>
-            </div>
-
             {/* Main Converter Hub & Dropzone */}
             <div className="mt-space-xl max-w-4xl mx-auto">
               <div className="bg-surface-container-lowest rounded-xl shadow-xl overflow-hidden border border-outline-variant/15">

@@ -44,7 +44,7 @@ export default function Navbar() {
           <button
             type="button"
             onClick={() => window.dispatchEvent(new CustomEvent('open-pwa-install'))}
-            className="flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg bg-primary text-white text-xs font-bold shadow-sm hover:bg-primary/90 active:scale-95 transition-all"
+            className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-primary hover:bg-primary/10 text-xs font-semibold transition-all border border-primary/20"
             title="Pasang Aplikasi Placeboo di HP / Komputer"
           >
             <span className="material-symbols-outlined text-[16px]">install_mobile</span>
