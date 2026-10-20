@@ -40,11 +40,11 @@ export default function Navbar() {
           </nav>
         </div>
 
-        <div className="flex items-center gap-space-md flex-shrink-0">
+        <div className="flex items-center gap-space-sm sm:gap-space-md flex-shrink-0">
           <button
             type="button"
             onClick={() => window.dispatchEvent(new CustomEvent('open-pwa-install'))}
-            className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/10 text-primary hover:bg-primary/20 text-xs font-semibold transition-all border border-primary/20"
+            className="flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg bg-primary text-white text-xs font-bold shadow-sm hover:bg-primary/90 active:scale-95 transition-all"
             title="Pasang Aplikasi Placeboo di HP / Komputer"
           >
             <span className="material-symbols-outlined text-[16px]">install_mobile</span>
