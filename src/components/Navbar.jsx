@@ -112,23 +112,8 @@ export default function Navbar() {
                     }`
                   }
                 >
-                  <span className="material-symbols-outlined text-[20px]">home</span>
-                  Konversi Dokumen
-                </NavLink>
-
-                <NavLink
-                  to="/semua-alat"
-                  onClick={() => setMobileMenuOpen(false)}
-                  className={({ isActive }) =>
-                    `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium ${
-                      isActive
-                        ? 'bg-surface-container text-primary font-semibold'
-                        : 'text-on-surface-variant hover:bg-surface-container-low'
-                    }`
-                  }
-                >
-                  <span className="material-symbols-outlined text-[20px]">grid_view</span>
-                  Semua Alat (42+)
+                  <span className="material-symbols-outlined text-[20px]">swap_horiz</span>
+                  PDF &amp; Gambar Converter
                 </NavLink>
 
                 <button

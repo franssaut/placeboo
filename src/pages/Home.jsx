@@ -1,11 +1,30 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import { useApp } from '../context/AppContext';
+import MobilePWAConverter from '../components/MobilePWAConverter';
 
 export default function Home() {
   const { addJobs, formatBytes, showToast, triggerDownload, convertAndCacheBlob } = useApp();
   const [searchParams] = useSearchParams();
   const fileInputRef = useRef(null);
+
+  const [isMobilePWA, setIsMobilePWA] = useState(false);
+  const [forceDesktopView, setForceDesktopView] = useState(false);
+
+  useEffect(() => {
+    const checkIsMobilePWA = () => {
+      const isStandalone =
+        window.matchMedia('(display-mode: standalone)').matches ||
+        window.navigator.standalone === true;
+      const isMobileScreen = window.innerWidth <= 768;
+      const isMobileUA = /android|iphone|ipad|ipod|mobile/i.test(navigator.userAgent);
+      setIsMobilePWA(isStandalone || isMobileScreen || isMobileUA);
+    };
+
+    checkIsMobilePWA();
+    window.addEventListener('resize', checkIsMobilePWA);
+    return () => window.removeEventListener('resize', checkIsMobilePWA);
+  }, []);
 
   const [targetFormat, setTargetFormat] = useState('DOCX');
   const [selectedFiles, setSelectedFiles] = useState([]);
@@ -163,6 +182,24 @@ export default function Home() {
       showToast(`Berkas dari ${service} berhasil diimpor!`, 'success');
     }, 600);
   };
+
+  // If on Mobile PWA, strictly show ONLY PDF to Image and Image to PDF converter
+  if (isMobilePWA && !forceDesktopView) {
+    return (
+      <main className="w-full pt-16 pb-12 flex-1 bg-surface">
+        <MobilePWAConverter />
+        <div className="text-center mt-4">
+          <button
+            type="button"
+            onClick={() => setForceDesktopView(true)}
+            className="text-xs text-on-surface-variant hover:text-primary transition-colors underline py-2 px-3 rounded-lg"
+          >
+            Beralih ke Tampilan Desktop Lengkap (42+ Format)
+          </button>
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main className="w-full pt-16 flex-1 bg-surface">
