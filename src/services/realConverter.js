@@ -936,7 +936,7 @@ export async function convertPdfToImage(file, targetExt = 'PNG') {
       return generateImageBlob(file.name || 'document.png', targetExt.toLowerCase());
     }
 
-    const scale = 2.0; // High-resolution crisp 2x scale
+    const scale = 3.5; // Ultra HD (250-300 DPI) resolution scaling
     const mime = targetExt.toUpperCase() === 'JPG' || targetExt.toUpperCase() === 'JPEG'
       ? 'image/jpeg'
       : (targetExt.toUpperCase() === 'WEBP' ? 'image/webp' : 'image/png');
@@ -944,12 +944,21 @@ export async function convertPdfToImage(file, targetExt = 'PNG') {
     // Single Page PDF
     if (numPages === 1) {
       const page = await pdfDoc.getPage(1);
-      const viewport = page.getViewport({ scale });
+      let pageScale = scale;
+      const rawVp = page.getViewport({ scale: 1.0 });
+      const maxDim = Math.max(rawVp.width, rawVp.height) || 842;
+      if (maxDim * pageScale > 4096) {
+        pageScale = 4096 / maxDim;
+      }
+
+      const viewport = page.getViewport({ scale: pageScale, rotation: page.rotate });
 
       const canvas = document.createElement('canvas');
       canvas.width = Math.floor(viewport.width);
       canvas.height = Math.floor(viewport.height);
-      const ctx = canvas.getContext('2d');
+      const ctx = canvas.getContext('2d', { alpha: false });
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
 
       // Crucial: fill with white background so JPG does not turn black
       ctx.fillStyle = '#ffffff';
@@ -957,7 +966,9 @@ export async function convertPdfToImage(file, targetExt = 'PNG') {
 
       await page.render({
         canvasContext: ctx,
-        viewport: viewport
+        viewport: viewport,
+        intent: 'print',
+        annotationMode: pdfjs.AnnotationMode?.ENABLE_STORAGE ?? 3
       }).promise;
 
       return await new Promise((resolve) => {
@@ -966,7 +977,7 @@ export async function convertPdfToImage(file, targetExt = 'PNG') {
             resolve(blob);
           } else {
             try {
-              const dataUrl = canvas.toDataURL(mime, 0.95);
+              const dataUrl = canvas.toDataURL(mime, 0.98);
               const byteString = atob(dataUrl.split(',')[1]);
               const ab = new ArrayBuffer(byteString.length);
               const ia = new Uint8Array(ab);
@@ -978,7 +989,7 @@ export async function convertPdfToImage(file, targetExt = 'PNG') {
               resolve(generateImageBlob(file.name || 'document.png', targetExt.toLowerCase()));
             }
           }
-        }, mime, 0.95);
+        }, mime, 0.98);
       });
     }
 
@@ -987,22 +998,28 @@ export async function convertPdfToImage(file, targetExt = 'PNG') {
     let totalHeight = 0;
     let maxWidth = 0;
     const pageGap = 16;
+    // For multi-page stitching, scale 2.5 prevents huge canvas overflow while retaining high definition
+    const multiScale = 2.5;
 
     for (let p = 1; p <= numPages; p++) {
       const page = await pdfDoc.getPage(p);
-      const viewport = page.getViewport({ scale });
+      const viewport = page.getViewport({ scale: multiScale, rotation: page.rotate });
 
       const pCanvas = document.createElement('canvas');
       pCanvas.width = Math.floor(viewport.width);
       pCanvas.height = Math.floor(viewport.height);
-      const pCtx = pCanvas.getContext('2d');
+      const pCtx = pCanvas.getContext('2d', { alpha: false });
+      pCtx.imageSmoothingEnabled = true;
+      pCtx.imageSmoothingQuality = 'high';
 
       pCtx.fillStyle = '#ffffff';
       pCtx.fillRect(0, 0, pCanvas.width, pCanvas.height);
 
       await page.render({
         canvasContext: pCtx,
-        viewport: viewport
+        viewport: viewport,
+        intent: 'print',
+        annotationMode: pdfjs.AnnotationMode?.ENABLE_STORAGE ?? 3
       }).promise;
 
       pageCanvases.push(pCanvas);

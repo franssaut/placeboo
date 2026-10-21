@@ -66,7 +66,7 @@ function calculateAutoFitCols(rows) {
 }
 
 // Full-Fidelity Real PDF to Image Renderer using pdfjs-dist and @napi-rs/canvas
-async function renderPdfToImage(pdfBuffer, targetFormat = 'PNG') {
+async function renderPdfToImage(pdfBuffer, targetFormat = 'PNG', options = {}) {
   try {
     const fs = await import('fs');
     const path = await import('path');
@@ -94,7 +94,12 @@ async function renderPdfToImage(pdfBuffer, targetFormat = 'PNG') {
       return null;
     }
 
-    const scale = 2.0; // 2.0 scale ensures razor-sharp text and graphics
+    // Determine scale based on DPI (default 300 DPI for Ultra HD print & reading quality)
+    const reqDpi = options.dpi ? Number(options.dpi) : (options.quality === 'standard' ? 150 : options.quality === 'high' ? 200 : 300);
+    let baseScale = options.scale ? Number(options.scale) : (reqDpi / 72);
+    if (!baseScale || isNaN(baseScale) || baseScale < 1.5) baseScale = 3.5;
+    if (baseScale > 4.2) baseScale = 4.166; // 300 DPI max
+
     const isJpg = targetFormat.toUpperCase() === 'JPG' || targetFormat.toUpperCase() === 'JPEG';
     const encodeFormat = isJpg ? 'jpeg' : 'png';
     const ext = isJpg ? 'jpg' : 'png';
@@ -104,9 +109,20 @@ async function renderPdfToImage(pdfBuffer, targetFormat = 'PNG') {
     // Render every page with high fidelity, print intent, and form/annotation layers
     for (let p = 1; p <= numPages; p++) {
       const page = await pdfDoc.getPage(p);
-      const viewport = page.getViewport({ scale, rotation: page.rotate });
+
+      // Memory protection: clamp scale if canvas dimension exceeds 4096px
+      let pageScale = baseScale;
+      const rawVp = page.getViewport({ scale: 1.0 });
+      const maxDim = Math.max(rawVp.width, rawVp.height) || 842;
+      if (maxDim * pageScale > 4096) {
+        pageScale = 4096 / maxDim;
+      }
+
+      const viewport = page.getViewport({ scale: pageScale, rotation: page.rotate });
       const canvas = createCanvas(Math.floor(viewport.width), Math.floor(viewport.height));
       const ctx = canvas.getContext('2d');
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
 
       // White background ensures clean document rendering
       ctx.fillStyle = '#ffffff';
@@ -119,7 +135,8 @@ async function renderPdfToImage(pdfBuffer, targetFormat = 'PNG') {
         annotationMode: pdfjs.AnnotationMode?.ENABLE_STORAGE ?? 3
       }).promise;
 
-      const pageImgBuffer = await canvas.encode(encodeFormat, isJpg ? 92 : undefined);
+      // 98% quality for JPG eliminates compression rings on fine text
+      const pageImgBuffer = await canvas.encode(encodeFormat, isJpg ? 98 : undefined);
       pages.push({
         pageNumber: p,
         buffer: pageImgBuffer,
@@ -609,8 +626,11 @@ export default async function handler(req, res) {
         mimeType = targetFormat === 'PNG' ? 'image/png' : 'image/jpeg';
         outputBase64 = fileBase64;
       } else if (sourceExt === 'pdf') {
-        // Render real PDF document pages into high-resolution image
-        const rendered = await renderPdfToImage(inputBuffer, targetFormat);
+        // Render real PDF document pages into high-resolution image (300 DPI Ultra HD)
+        const rendered = await renderPdfToImage(inputBuffer, targetFormat, {
+          dpi: req.body?.dpi || 300,
+          quality: req.body?.quality || 'ultra'
+        });
         if (rendered && rendered.pages && rendered.pages.length > 0) {
           mimeType = rendered.mimeType;
           outputFileName = `${cleanName}_halaman_1.${rendered.ext}`;

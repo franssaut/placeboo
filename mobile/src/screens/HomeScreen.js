@@ -28,6 +28,7 @@ export default function HomeScreen({ mode = 'pdf_to_image', onModeChange }) {
   const [selectedPdf, setSelectedPdf] = useState(null);
   const [selectedImages, setSelectedImages] = useState([]);
   const [targetFormat, setTargetFormat] = useState('PNG');
+  const [renderQuality, setRenderQuality] = useState('ultra'); // 'ultra' (300 DPI) | 'high' (200 DPI)
   const [isConverting, setIsConverting] = useState(false);
   const [progress, setProgress] = useState(0);
   const [convertedResult, setConvertedResult] = useState(null);
@@ -188,9 +189,17 @@ export default function HomeScreen({ mode = 'pdf_to_image', onModeChange }) {
       setProgress(15);
 
       try {
-        const result = await convertDocumentMobile(selectedPdf, targetFormat, (p) => {
-          setProgress(p);
-        });
+        const result = await convertDocumentMobile(
+          selectedPdf,
+          targetFormat,
+          (p) => {
+            setProgress(p);
+          },
+          {
+            quality: renderQuality,
+            dpi: renderQuality === 'ultra' ? 300 : 200
+          }
+        );
 
         setConvertedResult(result);
         Alert.alert(
@@ -627,6 +636,59 @@ export default function HomeScreen({ mode = 'pdf_to_image', onModeChange }) {
                     ]}
                   >
                     JPG (Ukuran Ringan)
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {/* Quality & DPI Selector for PDF to Image */}
+            <View style={[styles.formatSection, { marginTop: 10 }]}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                <Text style={styles.labelSection}>Resolusi Ketajaman Teks:</Text>
+                <View style={styles.badgeQuality}>
+                  <Text style={styles.badgeQualityText}>
+                    {renderQuality === 'ultra' ? 'Ultra HD (300 DPI)' : 'Tinggi (200 DPI)'}
+                  </Text>
+                </View>
+              </View>
+              <View style={styles.formatRow}>
+                <TouchableOpacity
+                  style={[styles.formatChip, renderQuality === 'ultra' && styles.formatChipActive]}
+                  onPress={() => setRenderQuality('ultra')}
+                  activeOpacity={0.7}
+                >
+                  <MaterialIcons
+                    name="high-quality"
+                    size={16}
+                    color={renderQuality === 'ultra' ? '#ffffff' : '#4f46e5'}
+                  />
+                  <Text
+                    style={[
+                      styles.formatChipText,
+                      renderQuality === 'ultra' && styles.formatChipTextActive
+                    ]}
+                  >
+                    Ultra HD (300 DPI)
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.formatChip, renderQuality === 'high' && styles.formatChipActive]}
+                  onPress={() => setRenderQuality('high')}
+                  activeOpacity={0.7}
+                >
+                  <MaterialIcons
+                    name="hd"
+                    size={16}
+                    color={renderQuality === 'high' ? '#ffffff' : '#64748b'}
+                  />
+                  <Text
+                    style={[
+                      styles.formatChipText,
+                      renderQuality === 'high' && styles.formatChipTextActive
+                    ]}
+                  >
+                    Tinggi (200 DPI)
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -1610,6 +1672,19 @@ const styles = StyleSheet.create({
   },
   formatChipTextActive: {
     color: '#ffffff'
+  },
+  badgeQuality: {
+    backgroundColor: '#ecfdf5',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#a7f3d0'
+  },
+  badgeQualityText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#059669'
   },
   progressContainer: {
     marginTop: 16

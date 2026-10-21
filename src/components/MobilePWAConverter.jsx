@@ -8,6 +8,7 @@ export default function MobilePWAConverter() {
   // PDF to Image state
   const [selectedPdf, setSelectedPdf] = useState(null);
   const [targetFormat, setTargetFormat] = useState('PNG'); // 'PNG' | 'JPG'
+  const [renderDpi, setRenderDpi] = useState('300'); // '300' (Ultra HD) | '200' (Tinggi) | '150' (Standar)
   const [isConvertingPdf, setIsConvertingPdf] = useState(false);
   const [pdfProgress, setPdfProgress] = useState(0);
   const [pdfPages, setPdfPages] = useState([]); // array of { pageNumber, blob, url, name }
@@ -102,28 +103,58 @@ export default function MobilePWAConverter() {
       const baseName = selectedPdf.name.replace(/\.[^/.]+$/, '');
       const rendered = [];
 
+      // Determine DPI & base scaling (300 DPI = ~4.166, 200 DPI = ~2.77, 150 DPI = ~2.08)
+      const selectedDpiNum = renderDpi === '300' ? 300 : renderDpi === '200' ? 200 : 150;
+      const baseScale = selectedDpiNum / 72;
+
       for (let p = 1; p <= numPages; p++) {
         const page = await pdfDoc.getPage(p);
-        const viewport = page.getViewport({ scale: 2.0 }); // High-res 2x
+
+        // Memory protection guard: clamp scale if dimension exceeds 4096px
+        let pageScale = baseScale;
+        const rawVp = page.getViewport({ scale: 1.0 });
+        const maxDim = Math.max(rawVp.width, rawVp.height) || 842;
+        if (maxDim * pageScale > 4096) {
+          pageScale = 4096 / maxDim;
+        }
+
+        const viewport = page.getViewport({ scale: pageScale, rotation: page.rotate });
         const canvas = document.createElement('canvas');
         canvas.width = Math.floor(viewport.width);
         canvas.height = Math.floor(viewport.height);
-        const ctx = canvas.getContext('2d');
 
-        // Pure white background for crisp rendering
+        // Optimized 2D context with hardware smoothing
+        const ctx = canvas.getContext('2d', { alpha: false });
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
+
+        // Pure white background for maximum readability and clean printing
         ctx.fillStyle = '#ffffff';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-        await page.render({ canvasContext: ctx, viewport }).promise;
+        // Render with print intent & annotation storage for crisp glyphs, stamps, vector forms
+        await page.render({
+          canvasContext: ctx,
+          viewport,
+          intent: 'print',
+          annotationMode: pdfjs.AnnotationMode?.ENABLE_STORAGE ?? 3
+        }).promise;
 
-        const blob = await new Promise((resolve) => canvas.toBlob(resolve, mime, 0.95));
+        // 98% quality for JPG to eliminate compression noise while preserving small text
+        const jpegQuality = 0.98;
+        const blob = await new Promise((resolve) =>
+          canvas.toBlob(resolve, mime, targetFormat === 'JPG' ? jpegQuality : undefined)
+        );
         const url = URL.createObjectURL(blob);
 
         rendered.push({
           pageNumber: p,
           blob,
           url,
-          name: `${baseName}_halaman_${p}.${ext}`
+          name: `${baseName}_halaman_${p}.${ext}`,
+          width: canvas.width,
+          height: canvas.height,
+          dpi: selectedDpiNum
         });
 
         const progressVal = Math.round(40 + (p / numPages) * 55);
@@ -537,6 +568,73 @@ export default function MobilePWAConverter() {
               </div>
             )}
 
+            {/* Resolution & DPI Quality Selector */}
+            {!pdfPages.length && (
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-on-surface">Resolusi &amp; Ketajaman Teks:</label>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-700">
+                    {renderDpi === '300' ? 'Ultra HD (300 DPI)' : renderDpi === '200' ? 'Tinggi (200 DPI)' : 'Standar (150 DPI)'}
+                  </span>
+                </div>
+                <div className="grid grid-cols-3 gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setRenderDpi('300')}
+                    className={`py-2 px-1.5 rounded-xl border text-xs font-bold flex flex-col items-center justify-center gap-0.5 transition-all ${
+                      renderDpi === '300'
+                        ? 'border-primary bg-primary text-white shadow-sm'
+                        : 'border-outline-variant/30 bg-surface-container-low text-on-surface'
+                    }`}
+                  >
+                    <span className="flex items-center gap-1">
+                      <span className="material-symbols-outlined text-[15px]">high_quality</span>
+                      <span>Ultra HD</span>
+                    </span>
+                    <span className={`text-[10px] font-normal ${renderDpi === '300' ? 'text-white/85' : 'text-on-surface-variant'}`}>
+                      300 DPI (Cetak)
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setRenderDpi('200')}
+                    className={`py-2 px-1.5 rounded-xl border text-xs font-bold flex flex-col items-center justify-center gap-0.5 transition-all ${
+                      renderDpi === '200'
+                        ? 'border-primary bg-primary text-white shadow-sm'
+                        : 'border-outline-variant/30 bg-surface-container-low text-on-surface'
+                    }`}
+                  >
+                    <span className="flex items-center gap-1">
+                      <span className="material-symbols-outlined text-[15px]">hd</span>
+                      <span>Tinggi</span>
+                    </span>
+                    <span className={`text-[10px] font-normal ${renderDpi === '200' ? 'text-white/85' : 'text-on-surface-variant'}`}>
+                      200 DPI (Tajam)
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setRenderDpi('150')}
+                    className={`py-2 px-1.5 rounded-xl border text-xs font-bold flex flex-col items-center justify-center gap-0.5 transition-all ${
+                      renderDpi === '150'
+                        ? 'border-primary bg-primary text-white shadow-sm'
+                        : 'border-outline-variant/30 bg-surface-container-low text-on-surface'
+                    }`}
+                  >
+                    <span className="flex items-center gap-1">
+                      <span className="material-symbols-outlined text-[15px]">speed</span>
+                      <span>Standar</span>
+                    </span>
+                    <span className={`text-[10px] font-normal ${renderDpi === '150' ? 'text-white/85' : 'text-on-surface-variant'}`}>
+                      150 DPI (Cepat)
+                    </span>
+                  </button>
+                </div>
+              </div>
+            )}
+
             {/* Convert Button */}
             {!pdfPages.length && (
               <button
@@ -566,9 +664,16 @@ export default function MobilePWAConverter() {
                 <div className="bg-surface-container-low rounded-xl p-3 border border-outline-variant/30">
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-xs font-bold text-on-surface">Pratinjau Hasil Dokumen:</span>
-                    <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-primary/10 text-primary">
-                      Hal {activePageIdx + 1} / {pdfPages.length}
-                    </span>
+                    <div className="flex items-center gap-1.5">
+                      {pdfPages[activePageIdx]?.width && (
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-700">
+                          {pdfPages[activePageIdx].width}×{pdfPages[activePageIdx].height} px • {pdfPages[activePageIdx].dpi || 300} DPI
+                        </span>
+                      )}
+                      <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-primary/10 text-primary">
+                        Hal {activePageIdx + 1} / {pdfPages.length}
+                      </span>
+                    </div>
                   </div>
 
                   {/* Navigation prev/next */}

@@ -216,7 +216,7 @@ const VALID_PNG_BASE64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQV
  * Main Conversion Function
  * Calls Website API with Automatic On-Device Fallback
  */
-export async function convertDocumentMobile(filesInput, targetFormat = 'XLSX', onProgress = () => {}) {
+export async function convertDocumentMobile(filesInput, targetFormat = 'XLSX', onProgress = () => {}, options = {}) {
   const isMulti = Array.isArray(filesInput);
   const files = isMulti ? filesInput.slice(0, 20) : [filesInput];
   const primaryFile = files[0] || {};
@@ -270,13 +270,17 @@ export async function convertDocumentMobile(filesInput, targetFormat = 'XLSX', o
               fileName: outputFileName,
               targetFormat,
               sourceFormat: 'images',
-              images: imagesPayload
+              images: imagesPayload,
+              dpi: options.dpi || 300,
+              quality: options.quality || 'ultra'
             }
           : {
               fileName: primaryFile.name,
               fileBase64: singleFileBase64,
               targetFormat,
-              sourceFormat: sourceExt
+              sourceFormat: sourceExt,
+              dpi: options.dpi || 300,
+              quality: options.quality || 'ultra'
             };
 
         const resp = await fetch(endpoint, {
