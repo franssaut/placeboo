@@ -94,11 +94,19 @@ async function renderPdfToImage(pdfBuffer, targetFormat = 'PNG', options = {}) {
       return null;
     }
 
-    // Determine scale based on DPI (default 300 DPI for Ultra HD print & reading quality)
-    const reqDpi = options.dpi ? Number(options.dpi) : (options.quality === 'standard' ? 150 : options.quality === 'high' ? 200 : 300);
+    // Determine scale based on DPI (supports 600 DPI Master, 300 DPI Ultra, 200 DPI High, 150 DPI Standard)
+    const reqDpi = options.dpi
+      ? Number(options.dpi)
+      : (options.quality === 'master' || options.quality === '600'
+          ? 600
+          : options.quality === 'standard'
+          ? 150
+          : options.quality === 'high'
+          ? 200
+          : 300);
     let baseScale = options.scale ? Number(options.scale) : (reqDpi / 72);
     if (!baseScale || isNaN(baseScale) || baseScale < 1.5) baseScale = 3.5;
-    if (baseScale > 4.2) baseScale = 4.166; // 300 DPI max
+    if (baseScale > 8.5) baseScale = 8.333; // 600 DPI maximum (600 / 72 = 8.333)
 
     const isJpg = targetFormat.toUpperCase() === 'JPG' || targetFormat.toUpperCase() === 'JPEG';
     const encodeFormat = isJpg ? 'jpeg' : 'png';
@@ -110,12 +118,12 @@ async function renderPdfToImage(pdfBuffer, targetFormat = 'PNG', options = {}) {
     for (let p = 1; p <= numPages; p++) {
       const page = await pdfDoc.getPage(p);
 
-      // Memory protection: clamp scale if canvas dimension exceeds 4096px
+      // Memory protection: clamp scale if canvas dimension exceeds 8192px (fits A4 @ 600 DPI: 4960x7016)
       let pageScale = baseScale;
       const rawVp = page.getViewport({ scale: 1.0 });
       const maxDim = Math.max(rawVp.width, rawVp.height) || 842;
-      if (maxDim * pageScale > 4096) {
-        pageScale = 4096 / maxDim;
+      if (maxDim * pageScale > 8192) {
+        pageScale = 8192 / maxDim;
       }
 
       const viewport = page.getViewport({ scale: pageScale, rotation: page.rotate });

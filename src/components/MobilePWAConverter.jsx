@@ -8,7 +8,7 @@ export default function MobilePWAConverter() {
   // PDF to Image state
   const [selectedPdf, setSelectedPdf] = useState(null);
   const [targetFormat, setTargetFormat] = useState('PNG'); // 'PNG' | 'JPG'
-  const [renderDpi, setRenderDpi] = useState('300'); // '300' (Ultra HD) | '200' (Tinggi) | '150' (Standar)
+  const [renderDpi, setRenderDpi] = useState('300'); // '600' (Master HD) | '300' (Ultra HD) | '200' (Tinggi) | '150' (Standar)
   const [isConvertingPdf, setIsConvertingPdf] = useState(false);
   const [pdfProgress, setPdfProgress] = useState(0);
   const [pdfPages, setPdfPages] = useState([]); // array of { pageNumber, blob, url, name }
@@ -103,19 +103,19 @@ export default function MobilePWAConverter() {
       const baseName = selectedPdf.name.replace(/\.[^/.]+$/, '');
       const rendered = [];
 
-      // Determine DPI & base scaling (300 DPI = ~4.166, 200 DPI = ~2.77, 150 DPI = ~2.08)
-      const selectedDpiNum = renderDpi === '300' ? 300 : renderDpi === '200' ? 200 : 150;
+      // Determine DPI & base scaling (600 DPI = ~8.333, 300 DPI = ~4.166, 200 DPI = ~2.77, 150 DPI = ~2.08)
+      const selectedDpiNum = renderDpi === '600' ? 600 : renderDpi === '300' ? 300 : renderDpi === '200' ? 200 : 150;
       const baseScale = selectedDpiNum / 72;
 
       for (let p = 1; p <= numPages; p++) {
         const page = await pdfDoc.getPage(p);
 
-        // Memory protection guard: clamp scale if dimension exceeds 4096px
+        // Memory protection guard: clamp scale if dimension exceeds 8192px (fits A4 at 600 DPI which is 7016px)
         let pageScale = baseScale;
         const rawVp = page.getViewport({ scale: 1.0 });
         const maxDim = Math.max(rawVp.width, rawVp.height) || 842;
-        if (maxDim * pageScale > 4096) {
-          pageScale = 4096 / maxDim;
+        if (maxDim * pageScale > 8192) {
+          pageScale = 8192 / maxDim;
         }
 
         const viewport = page.getViewport({ scale: pageScale, rotation: page.rotate });
@@ -574,17 +574,41 @@ export default function MobilePWAConverter() {
                 <div className="flex items-center justify-between">
                   <label className="text-xs font-bold text-on-surface">Resolusi &amp; Ketajaman Teks:</label>
                   <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-700">
-                    {renderDpi === '300' ? 'Ultra HD (300 DPI)' : renderDpi === '200' ? 'Tinggi (200 DPI)' : 'Standar (150 DPI)'}
+                    {renderDpi === '600'
+                      ? 'Master HD (600 DPI)'
+                      : renderDpi === '300'
+                      ? 'Ultra HD (300 DPI)'
+                      : renderDpi === '200'
+                      ? 'Tinggi (200 DPI)'
+                      : 'Standar (150 DPI)'}
                   </span>
                 </div>
-                <div className="grid grid-cols-3 gap-1.5">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setRenderDpi('600')}
+                    className={`py-2 px-1.5 rounded-xl border text-xs font-bold flex flex-col items-center justify-center gap-0.5 transition-all ${
+                      renderDpi === '600'
+                        ? 'border-primary bg-primary text-white shadow-sm ring-2 ring-primary/20'
+                        : 'border-outline-variant/30 bg-surface-container-low text-on-surface hover:bg-surface-container'
+                    }`}
+                  >
+                    <span className="flex items-center gap-1">
+                      <span className="material-symbols-outlined text-[15px] text-amber-300">verified</span>
+                      <span>Master HD</span>
+                    </span>
+                    <span className={`text-[10px] font-normal ${renderDpi === '600' ? 'text-white/85' : 'text-on-surface-variant'}`}>
+                      600 DPI (Arsip)
+                    </span>
+                  </button>
+
                   <button
                     type="button"
                     onClick={() => setRenderDpi('300')}
                     className={`py-2 px-1.5 rounded-xl border text-xs font-bold flex flex-col items-center justify-center gap-0.5 transition-all ${
                       renderDpi === '300'
-                        ? 'border-primary bg-primary text-white shadow-sm'
-                        : 'border-outline-variant/30 bg-surface-container-low text-on-surface'
+                        ? 'border-primary bg-primary text-white shadow-sm ring-2 ring-primary/20'
+                        : 'border-outline-variant/30 bg-surface-container-low text-on-surface hover:bg-surface-container'
                     }`}
                   >
                     <span className="flex items-center gap-1">
@@ -601,8 +625,8 @@ export default function MobilePWAConverter() {
                     onClick={() => setRenderDpi('200')}
                     className={`py-2 px-1.5 rounded-xl border text-xs font-bold flex flex-col items-center justify-center gap-0.5 transition-all ${
                       renderDpi === '200'
-                        ? 'border-primary bg-primary text-white shadow-sm'
-                        : 'border-outline-variant/30 bg-surface-container-low text-on-surface'
+                        ? 'border-primary bg-primary text-white shadow-sm ring-2 ring-primary/20'
+                        : 'border-outline-variant/30 bg-surface-container-low text-on-surface hover:bg-surface-container'
                     }`}
                   >
                     <span className="flex items-center gap-1">
@@ -619,8 +643,8 @@ export default function MobilePWAConverter() {
                     onClick={() => setRenderDpi('150')}
                     className={`py-2 px-1.5 rounded-xl border text-xs font-bold flex flex-col items-center justify-center gap-0.5 transition-all ${
                       renderDpi === '150'
-                        ? 'border-primary bg-primary text-white shadow-sm'
-                        : 'border-outline-variant/30 bg-surface-container-low text-on-surface'
+                        ? 'border-primary bg-primary text-white shadow-sm ring-2 ring-primary/20'
+                        : 'border-outline-variant/30 bg-surface-container-low text-on-surface hover:bg-surface-container'
                     }`}
                   >
                     <span className="flex items-center gap-1">

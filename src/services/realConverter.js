@@ -947,8 +947,8 @@ export async function convertPdfToImage(file, targetExt = 'PNG') {
       let pageScale = scale;
       const rawVp = page.getViewport({ scale: 1.0 });
       const maxDim = Math.max(rawVp.width, rawVp.height) || 842;
-      if (maxDim * pageScale > 4096) {
-        pageScale = 4096 / maxDim;
+      if (maxDim * pageScale > 8192) {
+        pageScale = 8192 / maxDim;
       }
 
       const viewport = page.getViewport({ scale: pageScale, rotation: page.rotate });

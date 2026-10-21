@@ -197,7 +197,7 @@ export default function HomeScreen({ mode = 'pdf_to_image', onModeChange }) {
           },
           {
             quality: renderQuality,
-            dpi: renderQuality === 'ultra' ? 300 : 200
+            dpi: renderQuality === 'master' ? 600 : renderQuality === 'ultra' ? 300 : 200
           }
         );
 
@@ -647,11 +647,35 @@ export default function HomeScreen({ mode = 'pdf_to_image', onModeChange }) {
                 <Text style={styles.labelSection}>Resolusi Ketajaman Teks:</Text>
                 <View style={styles.badgeQuality}>
                   <Text style={styles.badgeQualityText}>
-                    {renderQuality === 'ultra' ? 'Ultra HD (300 DPI)' : 'Tinggi (200 DPI)'}
+                    {renderQuality === 'master'
+                      ? 'Master HD (600 DPI)'
+                      : renderQuality === 'ultra'
+                      ? 'Ultra HD (300 DPI)'
+                      : 'Tinggi (200 DPI)'}
                   </Text>
                 </View>
               </View>
               <View style={styles.formatRow}>
+                <TouchableOpacity
+                  style={[styles.formatChip, renderQuality === 'master' && styles.formatChipActive]}
+                  onPress={() => setRenderQuality('master')}
+                  activeOpacity={0.7}
+                >
+                  <MaterialIcons
+                    name="verified"
+                    size={16}
+                    color={renderQuality === 'master' ? '#ffffff' : '#4f46e5'}
+                  />
+                  <Text
+                    style={[
+                      styles.formatChipText,
+                      renderQuality === 'master' && styles.formatChipTextActive
+                    ]}
+                  >
+                    Master HD (600 DPI)
+                  </Text>
+                </TouchableOpacity>
+
                 <TouchableOpacity
                   style={[styles.formatChip, renderQuality === 'ultra' && styles.formatChipActive]}
                   onPress={() => setRenderQuality('ultra')}
@@ -660,7 +684,7 @@ export default function HomeScreen({ mode = 'pdf_to_image', onModeChange }) {
                   <MaterialIcons
                     name="high-quality"
                     size={16}
-                    color={renderQuality === 'ultra' ? '#ffffff' : '#4f46e5'}
+                    color={renderQuality === 'ultra' ? '#ffffff' : '#64748b'}
                   />
                   <Text
                     style={[
