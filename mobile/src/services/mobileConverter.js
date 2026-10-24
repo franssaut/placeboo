@@ -39,17 +39,36 @@ function getStorageDirectory() {
   return dir.endsWith('/') ? dir : `${dir}/`;
 }
 
+// Pure JS Base64 encoder - 100% reliable in React Native Hermes engine
+const B64_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+function uint8ArrayToBase64(bytes) {
+  let result = '';
+  const len = bytes.length;
+  for (let i = 0; i < len; i += 3) {
+    const b0 = bytes[i];
+    const b1 = i + 1 < len ? bytes[i + 1] : 0;
+    const b2 = i + 2 < len ? bytes[i + 2] : 0;
+    result += B64_CHARS[b0 >> 2];
+    result += B64_CHARS[((b0 & 3) << 4) | (b1 >> 4)];
+    result += i + 1 < len ? B64_CHARS[((b1 & 15) << 2) | (b2 >> 6)] : '=';
+    result += i + 2 < len ? B64_CHARS[b2 & 63] : '=';
+  }
+  return result;
+}
+
 /**
  * Universal Base64 reader for any mobile URI (file://, content://, cache)
- * Uses native fetch + FileReader to bypass Android Scoped Storage restrictions
  */
 async function readFileAsBase64(uri) {
-  // Method 1: Direct native FileSystem readAsStringAsync (Fastest & avoids Response.blob overhead)
+  // Method 1: Direct native FileSystem readAsStringAsync
   try {
     if (FileSystemLegacy && typeof FileSystemLegacy.readAsStringAsync === 'function') {
-      return await FileSystemLegacy.readAsStringAsync(uri, {
+      const b64 = await FileSystemLegacy.readAsStringAsync(uri, {
         encoding: FileSystemLegacy.EncodingType?.Base64 || 'base64'
       });
+      if (b64 && typeof b64 === 'string' && b64.trim().length > 0) {
+        return b64.trim();
+      }
     }
   } catch (legacyErr) {
     console.warn('[readFileAsBase64 legacy FS warn]:', legacyErr?.message);
@@ -61,37 +80,20 @@ async function readFileAsBase64(uri) {
       const f = new FileSystemNew.File(uri);
       const buf = await f.arrayBuffer();
       if (buf && buf.byteLength > 0) {
-        const bytes = new Uint8Array(buf);
-        let binary = '';
-        const len = bytes.byteLength;
-        for (let i = 0; i < len; i++) {
-          binary += String.fromCharCode(bytes[i]);
-        }
-        return btoa(binary);
+        return uint8ArrayToBase64(new Uint8Array(buf));
       }
     }
   } catch (newFsErr) {
     console.warn('[readFileAsBase64 modern FS warn]:', newFsErr?.message);
   }
 
-  // Method 3: Fallback native fetch + arrayBuffer (Bypasses Response.blob overhead & warnings)
+  // Method 3: Fallback native fetch + arrayBuffer
   try {
     const res = await fetch(uri);
     if (res.ok || res.status === 0) {
       const buf = await res.arrayBuffer();
       if (buf && buf.byteLength > 0) {
-        const bytes = new Uint8Array(buf);
-        let binary = '';
-        const chunkSize = 8192;
-        const len = bytes.byteLength;
-        for (let i = 0; i < len; i += chunkSize) {
-          const chunk = bytes.subarray(i, Math.min(i + chunkSize, len));
-          binary += String.fromCharCode.apply(null, chunk);
-        }
-        const b64 = btoa(binary);
-        if (b64 && b64.length > 0) {
-          return b64;
-        }
+        return uint8ArrayToBase64(new Uint8Array(buf));
       }
     }
   } catch (fetchErr) {
@@ -142,15 +144,20 @@ async function readTextFile(uri) {
  * Writes binary Base64 file safely to app's cache directory
  */
 async function writeBase64File(uri, base64) {
+  const cleanBase64 = String(base64 || '').replace(/^data:[^;]+;base64,/, '').trim();
+  if (!cleanBase64) {
+    throw new Error('Data berkas Base64 kosong.');
+  }
+
   if (FileSystemLegacy && typeof FileSystemLegacy.writeAsStringAsync === 'function') {
-    await FileSystemLegacy.writeAsStringAsync(uri, base64, {
+    await FileSystemLegacy.writeAsStringAsync(uri, cleanBase64, {
       encoding: FileSystemLegacy.EncodingType?.Base64 || 'base64'
     });
     return;
   }
   if (FileSystemNew && FileSystemNew.File) {
     const file = new FileSystemNew.File(uri);
-    await file.write(base64);
+    await file.write(cleanBase64);
     return;
   }
   throw new Error('Sistem berkas tidak mendukung penulisan berkas biner.');
@@ -257,7 +264,9 @@ export async function convertDocumentMobile(filesInput, targetFormat = 'XLSX', o
     onProgress(55);
 
     const endpoints = [PLACEBOO_API_URL, PLACEBOO_LOCAL_API_URL];
-    const timeoutMs = isMulti ? 25000 : 8000;
+    const timeoutMs = isMulti ? 45000 : 35000;
+
+    let lastApiErrorMessage = '';
 
     for (const endpoint of endpoints) {
       try {
@@ -338,11 +347,25 @@ export async function convertDocumentMobile(filesInput, targetFormat = 'XLSX', o
               numPages: data.numPages || (savedPages.length > 0 ? savedPages.length : 1),
               pages: savedPages.length > 0 ? savedPages : [{ pageNumber: 1, fileName: actualFileName, uri: actualOutputUri }]
             };
+          } else {
+            lastApiErrorMessage = data.error || 'Respon server tidak valid.';
+          }
+        } else {
+          try {
+            const errData = await resp.json();
+            lastApiErrorMessage = errData.error || `Server HTTP ${resp.status}`;
+          } catch (_) {
+            lastApiErrorMessage = `Server HTTP ${resp.status}`;
           }
         }
       } catch (fetchErr) {
+        lastApiErrorMessage = fetchErr?.message || 'Gagal menghubungi server';
         console.warn(`[API Attempt ${endpoint} Failed]:`, fetchErr?.message);
       }
+    }
+
+    if (sourceExt === 'pdf' && (targetFormat.toUpperCase() === 'PNG' || targetFormat.toUpperCase() === 'JPG')) {
+      throw new Error(lastApiErrorMessage || 'Gagal memproses berkas PDF melalui server Placeboo. Pastikan koneksi internet aktif.');
     }
   }
 

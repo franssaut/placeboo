@@ -2,6 +2,7 @@ import * as XLSX from 'xlsx';
 import { jsPDF } from 'jspdf';
 import { Document, Paragraph, TextRun, HeadingLevel, Packer } from 'docx';
 import { encode as encodePng } from 'fast-png';
+import 'pdfjs-dist/legacy/build/pdf.worker.mjs';
 
 /**
  * Placeboo High-Performance Document Conversion Serverless API
@@ -72,6 +73,8 @@ async function renderPdfToImage(pdfBuffer, targetFormat = 'PNG', options = {}) {
     const path = await import('path');
     const { createCanvas } = await import('@napi-rs/canvas');
     const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
+    const pdfWorker = await import('pdfjs-dist/legacy/build/pdf.worker.mjs');
+    globalThis.pdfjsWorker = pdfWorker;
 
     const { pathToFileURL } = await import('url');
     const localFontDir = pathToFileURL(path.resolve('node_modules/pdfjs-dist/standard_fonts')).href + '/';
