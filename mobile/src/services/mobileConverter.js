@@ -11,7 +11,7 @@ import { DEFAULT_DOCUMENT_PNG_BASE64 } from './defaultPngBase64';
  */
 
 export const PLACEBOO_API_URL = 'https://placeboo.vercel.app/api/convert';
-export const PLACEBOO_LOCAL_API_URL = 'http://192.168.100.14:5173/api/convert';
+export const PLACEBOO_LOCAL_API_URL = 'http://192.168.0.150:5173/api/convert';
 
 export const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50 MB
 
@@ -256,7 +256,7 @@ export async function convertDocumentMobile(filesInput, targetFormat = 'XLSX', o
   if (imagesPayload.length > 0) {
     onProgress(55);
 
-    const endpoints = [PLACEBOO_LOCAL_API_URL, PLACEBOO_API_URL];
+    const endpoints = [PLACEBOO_API_URL, PLACEBOO_LOCAL_API_URL];
     const timeoutMs = isMulti ? 25000 : 8000;
 
     for (const endpoint of endpoints) {
