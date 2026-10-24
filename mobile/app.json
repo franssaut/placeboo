@@ -12,7 +12,14 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.placeboo.converter"
+      "bundleIdentifier": "com.placeboo.converter",
+      "infoPlist": {
+        "UIFileSharingEnabled": true,
+        "LSSupportsOpeningDocumentsInPlace": true,
+        "NSDocumentsFolderUsageDescription": "Placeboo memerlukan izin untuk membaca dan mengonversi berkas dokumen PDF Anda.",
+        "NSPhotoLibraryUsageDescription": "Placeboo memerlukan izin galeri untuk memilih foto dan membuat berkas PDF.",
+        "NSPhotoLibraryAddUsageDescription": "Placeboo memerlukan izin galeri untuk menyimpan hasil gambar dokumen ke galeri foto Anda."
+      }
     },
     "android": {
       "package": "com.placeboo.converter",
@@ -26,7 +33,10 @@
       "permissions": [
         "READ_EXTERNAL_STORAGE",
         "WRITE_EXTERNAL_STORAGE",
-        "READ_MEDIA_IMAGES"
+        "READ_MEDIA_IMAGES",
+        "READ_MEDIA_VIDEO",
+        "READ_MEDIA_AUDIO",
+        "MANAGE_EXTERNAL_STORAGE"
       ]
     },
     "web": {

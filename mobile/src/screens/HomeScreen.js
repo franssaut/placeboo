@@ -8,7 +8,9 @@ import {
   Alert,
   ActivityIndicator,
   Image,
-  Linking
+  Linking,
+  Platform,
+  PermissionsAndroid
 } from 'react-native';
 import * as DocumentPicker from 'expo-document-picker';
 import { MaterialIcons, FontAwesome } from '@expo/vector-icons';
@@ -74,11 +76,37 @@ export default function HomeScreen({ mode = 'pdf_to_image', onModeChange }) {
 
   const isPdfToImage = activeMode === 'pdf_to_image';
 
+  // Request runtime storage and media permissions for Android
+  const requestStoragePermission = async () => {
+    if (Platform.OS === 'android') {
+      try {
+        if (Platform.Version >= 33) {
+          const perms = [
+            PermissionsAndroid.PERMISSIONS.READ_MEDIA_IMAGES
+          ];
+          if (PermissionsAndroid.PERMISSIONS.READ_MEDIA_VIDEO) {
+            perms.push(PermissionsAndroid.PERMISSIONS.READ_MEDIA_VIDEO);
+          }
+          await PermissionsAndroid.requestMultiple(perms);
+        } else {
+          await PermissionsAndroid.requestMultiple([
+            PermissionsAndroid.PERMISSIONS.READ_EXTERNAL_STORAGE,
+            PermissionsAndroid.PERMISSIONS.WRITE_EXTERNAL_STORAGE
+          ]);
+        }
+      } catch (err) {
+        console.warn('Izin penyimpanan Android:', err);
+      }
+    }
+  };
+
   // Pick PDF (Single file)
   const pickPdfDocument = async () => {
     try {
+      await requestStoragePermission();
+
       const result = await DocumentPicker.getDocumentAsync({
-        type: ['application/pdf'],
+        type: ['application/pdf', 'application/x-pdf', 'application/octet-stream', '*/*'],
         copyToCacheDirectory: true
       });
 
@@ -94,10 +122,12 @@ export default function HomeScreen({ mode = 'pdf_to_image', onModeChange }) {
         }
 
         const ext = file.name && file.name.includes('.') ? file.name.split('.').pop().toLowerCase() : '';
-        if (ext !== 'pdf') {
+        const mime = (file.mimeType || '').toLowerCase();
+        const isPdf = ext === 'pdf' || mime.includes('pdf');
+        if (!isPdf) {
           Alert.alert(
             'Berkas Tidak Sesuai',
-            'Silakan pilih berkas dokumen berformat PDF untuk mode PDF ke Gambar.'
+            'Silakan pilih berkas dokumen berformat PDF (*.pdf) untuk mode PDF ke Gambar.'
           );
           return;
         }
@@ -114,6 +144,8 @@ export default function HomeScreen({ mode = 'pdf_to_image', onModeChange }) {
   // Pick Images (Multiple files up to 20)
   const pickImages = async () => {
     try {
+      await requestStoragePermission();
+
       const remainingSlots = MAX_IMAGES_LIMIT - selectedImages.length;
       if (remainingSlots <= 0) {
         Alert.alert(
@@ -124,7 +156,7 @@ export default function HomeScreen({ mode = 'pdf_to_image', onModeChange }) {
       }
 
       const result = await DocumentPicker.getDocumentAsync({
-        type: ['image/*'],
+        type: ['image/*', 'application/octet-stream', '*/*'],
         multiple: true,
         copyToCacheDirectory: true
       });
